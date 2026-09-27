@@ -7,6 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { createStore } = require("../Runtime/store.cjs");
 const { createSubscriptionConnections } = require("../Runtime/subscription-video-providers.cjs");
+const { prepareGrokHome } = require("../Runtime/grok-subscription.cjs");
 
 async function setup(t) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "mbs-subscriptions-"));
@@ -85,4 +86,34 @@ test("CLI login opens only the explicitly chosen provider with safely quoted exe
   assert.match(script, /unset XAI_API_KEY/);
   assert.equal((await fs.stat(opened)).mode & 0o777, 0o700);
   assert.ok(f.calls.every(call => call.args[0] === "who_am_i"));
+});
+
+test("Grok profile errors remain actionable and do not open a misleading login prompt", async t => {
+  const f = await setup(t), home = path.join(f.store.baseDir, "video-connections/grok-profile");
+  await prepareGrokHome(home);
+  const configFile = path.join(home, "config.toml");
+  const saved = (await fs.readFile(configFile, "utf8")).replace("disable_api_key_auth = true", "disable_api_key_auth = false");
+  await fs.writeFile(configFile, saved);
+  const connections = createSubscriptionConnections({ store: f.store,
+    locate: async provider => provider === "grok" ? "/fixture/grok" : null,
+    run: async () => assert.fail("Changed profile must not launch CLI"),
+    nativeCall: async () => assert.fail("Settings errors must not ask the user to log in again") });
+  const grok = (await connections.providers()).providers.find(provider => provider.id === "grok");
+  assert.equal(grok.errorCode, "CLI_PROFILE_INVALID");
+  assert.match(grok.statusMessage, /설정/);
+  const configured = await connections.configure({ provider: "grok" });
+  assert.equal(configured.ok, false);
+  assert.equal(configured.errorCode, "CLI_PROFILE_INVALID");
+  assert.equal(await fs.readFile(configFile, "utf8"), saved);
+});
+
+test("unexpected CLI diagnostics never expose raw messages in connection status", async t => {
+  const f = await setup(t);
+  const connections = createSubscriptionConnections({ store: f.store,
+    locate: async provider => provider === "grok" ? "/fixture/grok" : null,
+    run: async () => { throw new Error("synthetic-private-account-value"); },
+    nativeCall: async () => assert.fail("Status lookup must not open a prompt") });
+  const result = await connections.providers();
+  assert.equal(result.providers[0].errorCode, "CONNECTION_CHECK_FAILED");
+  assert.doesNotMatch(JSON.stringify(result), /synthetic-private-account-value/);
 });

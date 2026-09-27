@@ -10,6 +10,16 @@ const kling = require("./kling-subscription.cjs");
 const PROVIDERS = Object.freeze({ grok: grok.CATALOG, kling: kling.CATALOG });
 const shellQuote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
 const fail = message => Object.assign(new Error(message), { code: "VIDEO_PROVIDER_UNCONFIGURED" });
+const CONNECTION_ERRORS = Object.freeze({
+  CLI_PROFILE_INVALID: "앱 전용 Grok 설정을 확인하지 못했습니다. 인증 방식이나 도구 제한 설정이 변경되었는지 확인해 주세요.",
+  CLI_UNSUPPORTED: "설치된 Grok CLI에서 필요한 연결 기능을 확인하지 못했습니다. 공식 CLI를 업데이트해 주세요.",
+  CLI_SUBSCRIPTION_REQUIRED: "Grok 연결이 구독 로그인으로 제한되지 않아 중단했습니다. 앱 전용 연결 설정을 확인해 주세요.",
+  CLI_TIMEOUT: "CLI 연결 확인 시간이 초과되었습니다. 네트워크를 확인한 뒤 상태를 새로고침해 주세요.",
+  CLI_START_FAILED: "CLI를 시작하지 못했습니다. 실행 파일 경로와 실행 권한을 확인해 주세요.",
+  CLI_EXITED: "CLI가 연결 확인 중 종료되었습니다. 상태를 새로고침해 주세요.",
+  GROK_REQUEST_FAILED: "Grok 로그인 확인에 실패했습니다. 앱 전용 로그인과 구독 상태를 확인해 주세요.",
+  PROVIDER_RESPONSE_INVALID: "CLI의 연결 상태 응답을 해석하지 못했습니다. 공식 CLI를 업데이트한 뒤 다시 확인해 주세요."
+});
 
 function createSubscriptionConnections({ store, nativeCall, run = runCLI, locate = findCLI }) {
   const profilesDir = path.join(store.baseDir, "video-connections");
@@ -52,8 +62,11 @@ function createSubscriptionConnections({ store, nativeCall, run = runCLI, locate
         durations: status.durations?.length ? status.durations : catalog.durations,
         resolutions: status.resolutions?.length ? status.resolutions : catalog.resolutions,
         statusMessage: status.message || (status.configured ? "구독 계정 연결됨" : "CLI에서 구독 계정으로 로그인해 주세요.") };
-    } catch {
-      return { ...catalog, installed: true, configured: false, statusMessage: "구독 연결을 확인하지 못했습니다. 연결 확인을 눌러 주세요." };
+    } catch (error) {
+      // Never display arbitrary CLI errors: they can contain account data.
+      const code = Object.hasOwn(CONNECTION_ERRORS, error?.code) ? error.code : "CONNECTION_CHECK_FAILED";
+      return { ...catalog, installed: true, configured: false, errorCode: code,
+        statusMessage: CONNECTION_ERRORS[code] || "구독 연결을 확인하지 못했습니다. 연결 확인을 눌러 주세요." };
     }
   }
   async function providers() { return { ok: true, providers: await Promise.all(Object.keys(PROVIDERS).map(inspect)) }; }
@@ -80,6 +93,9 @@ function createSubscriptionConnections({ store, nativeCall, run = runCLI, locate
     await saveSettings(provider, { executable, enabled: true });
     const status = await inspect(provider);
     if (status.configured) return { ok: true, configured: true, message: "구독 계정 연결을 확인했습니다." };
+    if (status.errorCode && !["VIDEO_AUTH_REJECTED", "GROK_REQUEST_FAILED"].includes(status.errorCode)) {
+      return { ok: false, configured: false, errorCode: status.errorCode, error: status.statusMessage };
+    }
     const answer = await nativeCall("dialog.message", { options: { message: `${catalog.label} 구독 계정 로그인`,
       detail: provider === "grok"
         ? "MotionBoard 전용 Grok 로그인 창을 터미널에서 엽니다. 웹 구독 계정으로 로그인한 뒤 앱에서 연결 확인을 누르세요. 기존 Grok CLI 로그인은 유지됩니다."

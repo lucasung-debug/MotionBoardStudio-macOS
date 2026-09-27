@@ -86,7 +86,7 @@ async function complete({ message, update, permission, options }, overrides = {}
   } });
 }
 
-test("isolated OAuth profile never overwrites existing config or reads credentials", async t => {
+test("isolated OAuth profile accepts CLI metadata and formatting without overwriting config or credentials", async t => {
   const f = await fixture(t);
   const profile = await prepareGrokHome(f.home);
   const auth = path.join(profile, "auth.json");
@@ -95,9 +95,48 @@ test("isolated OAuth profile never overwrites existing config or reads credentia
   assert.equal(await fs.readFile(auth, "utf8"), "opaque-private-fixture");
   const config = await fs.readFile(path.join(profile, "config.toml"), "utf8");
   assert.match(config, /disable_api_key_auth = true/); assert.match(config, /preferred_method = "oidc"/);
-  await fs.appendFile(path.join(profile, "config.toml"), "# user edit\n");
+  const saved = config.replace('preferred_method = "oidc"', "preferred_method = 'oidc' # OAuth")
+    .replace("enabled = false", "enabled=false # keep disabled")
+    + "\n# Saved by Grok CLI after login\n[marketplace]\ndefault_skills_installs_purged = true\n";
+  await fs.writeFile(path.join(profile, "config.toml"), saved);
+  await prepareGrokHome(f.home);
+  assert.equal(await fs.readFile(path.join(profile, "config.toml"), "utf8"), saved);
+  assert.equal(await fs.readFile(auth, "utf8"), "opaque-private-fixture");
+  const stub = fakeSpawn();
+  const status = await inspectGrokSubscription({ ...f, executable: EXE, run: versionRun, spawnImpl: stub.spawnImpl });
+  assert.equal(status.configured, true);
+  assert.deepEqual(stub.requests.map(r => r.method), ["initialize", "authenticate"]);
+});
+
+test("isolated profile still rejects changed, missing, duplicate, or unknown settings before starting a CLI", async t => {
+  const f = await fixture(t), profile = await prepareGrokHome(f.home);
+  const configPath = path.join(profile, "config.toml"), config = await fs.readFile(configPath, "utf8");
+  const unsafe = [
+    config.replace("disable_api_key_auth = true", "disable_api_key_auth = false"),
+    config.replace('preferred_method = "oidc"', 'preferred_method = "api_key"'),
+    config.replace("[managed_mcps]\nenabled = false", "[managed_mcps]\nenabled = true"),
+    config.replace("use_leader = false\n", ""),
+    config.replace("use_leader = false", "use_leader = false\nuse_leader = true"),
+    config + "\n[cli]\nuse_leader = false\n",
+    config + "\n[hooks]\nenabled = true\n",
+    config + "\n[hooks]\n",
+    config + "\n[managed_mcps.custom_server]\n",
+    config + '\n[marketplace]\ndefault_skills_installs_purged = "true"\n'
+  ];
+  for (const saved of unsafe) {
+    await fs.writeFile(configPath, saved);
+    await assert.rejects(inspectGrokSubscription({ ...f, executable: EXE, run: () => assert.fail("CLI must not start") }), { code: "CLI_PROFILE_INVALID" });
+    assert.equal(await fs.readFile(configPath, "utf8"), saved);
+  }
+});
+
+test("isolated profile rejects symlinked config without modifying its target", async t => {
+  const f = await fixture(t), target = path.join(f.root, "external.toml");
+  await fs.mkdir(f.home);
+  await fs.writeFile(target, "external-fixture");
+  await fs.symlink(target, path.join(f.home, "config.toml"));
   await assert.rejects(prepareGrokHome(f.home), { code: "CLI_PROFILE_INVALID" });
-  assert.match(await fs.readFile(path.join(profile, "config.toml"), "utf8"), /# user edit/);
+  assert.equal(await fs.readFile(target, "utf8"), "external-fixture");
 });
 
 test("connection status authenticates only the advertised cached OAuth method without prompting", async t => {

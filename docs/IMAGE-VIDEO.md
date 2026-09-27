@@ -77,6 +77,19 @@ Grok의 범위는 설치된 공식 CLI의 `bundled/skills/imagine/SKILL.md`와 [
 node --test Tests/*subscription.test.cjs Tests/video-cli.test.cjs Tests/subscription-connections.test.cjs Tests/video-providers.test.cjs Tests/image-video.test.cjs Tests/studio-ui.test.cjs
 ```
 
+### 2026-09-28 연결 오류 수정 · 개발본 9
+
+로그인 후에도 연결되지 않던 원인 두 가지를 수정했습니다. Grok은 CLI가 정상적으로 추가한 `marketplace.default_skills_installs_purged` 설정 때문에 앱의 파일 전체 비교에 실패했습니다. 필요한 인증·도구 제한 값은 그대로 검사하면서 해당 메타데이터와 주석·공백 변경을 허용합니다. 기존 설정과 인증 파일은 덮어쓰지 않습니다. Kling CLI 0.2.0은 긴 JSON을 출력하고 바로 종료하면서 파이프 응답이 65,536바이트에서 잘렸습니다. 공식 `--quiet` 옵션으로 완전한 compact JSON을 받도록 수정했고, 불완전한 응답은 계속 거부합니다. 설정 오류·실행 오류도 로그인 안내와 구분해 표시합니다.
+
+- 연결·생성 어댑터·프로세스 제어·장면·UI 검사 70개 통과. 검토에서 빈 미등록 Grok 설정 섹션도 거부하도록 보완하고 관련 검사 11개를 다시 통과했습니다. Grok과 Kling의 각 원인은 수정 전 실패하는 회귀 사례로 재현했습니다.
+- 패키지에 포함된 Node와 Runtime으로 두 서비스의 실제 OAuth 연결 성공을 확인했습니다. Kling 회원 등급·잔여 크레딧 조회도 성공했습니다. 이 검사는 영상 생성·이미지 업로드를 요청하지 않았습니다.
+- 실제 Mac WebKit에서 구독 연결 UI, 16개 장면, 로컬 영상 재생·탐색을 검사했습니다. 해당 화면 검사는 별도 fixture를 사용하며 계정 연결 검증과 구분됩니다.
+- 소스의 Runtime·StudioUI 20개 파일과 앱 번들이 일치합니다. 앱 서명·DMG 체크섬·마운트한 앱 서명 검사도 통과했습니다.
+
+로컬 결과는 `dist/MotionBoard Studio Development 9.app`, `dist/MotionBoardStudio-development-9-arm64.dmg`입니다. DMG는 73,108,522바이트이며 SHA256은 `680cbfd47143fae8954ece8fa6a8b9f8e89faf564e640655571a5d52e7b7b54d`입니다. 기존 빌드를 보존했고 공개 릴리스는 교체하지 않았습니다. 기존과 같은 ad-hoc 서명이며 Apple 공증을 받지 않았습니다.
+
+검증 기록은 `.local/subscription-connection-fix-20260928/`의 `tests.log`, `grok-before.log`, `grok-reviewed.log`, `bundled-live-status.json`, `native-ui/native-ui-receipt.json`, `package-receipt.json`입니다. 실계정 영상 생성과 보드 대비 품질 검증은 여전히 남아 있습니다.
+
 ### 2026-09-28 구독 연결 개발본 8
 
 로컬 패키지는 `dist/MotionBoard Studio Development 8.app`와 `dist/MotionBoardStudio-development-8-arm64.dmg`입니다. 기존 앱과 DMG는 보존했습니다. 새 DMG는 73,107,317바이트이며 SHA256은 `a5f1d1c8c12bb883d1e1cd1612caed6edb9701158d08afd3e915239417cecbf8`입니다. 로컬 ad-hoc 서명으로, 새 공개 릴리스나 Apple 공증은 수행하지 않았습니다.

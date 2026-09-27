@@ -96,12 +96,51 @@ async function privateDirectory(directory) {
   return fs.realpath(directory);
 }
 
-async function writeOnceChecked(file, data) {
-  try { await fs.writeFile(file, data, { flag: "wx", mode: 0o600 }); }
+// This is a validator for our small profile schema, not a general TOML parser.
+// Grok rewrites config.toml on login/startup and adds marketplace bookkeeping.
+// Allow that metadata and formatting changes, while requiring every isolation
+// setting and rejecting unknown settings, duplicate keys, and unsupported syntax.
+const PROFILE_SECTIONS = new Set([...CONFIG.matchAll(/^\[([^\]]+)\]$/gm)].map(match => match[1]).concat("marketplace"));
+function profileValues(text) {
+  if (Buffer.byteLength(text, "utf8") > 64 * 1024) return null;
+  const values = new Map(), sections = new Set();
+  let section = "";
+  for (const line of text.split(/\r?\n/)) {
+    if (/^\s*(?:#.*)?$/.test(line)) continue;
+    const header = /^\s*\[\s*([A-Za-z0-9_-]+(?:\s*\.\s*[A-Za-z0-9_-]+)*)\s*\]\s*(?:#.*)?$/.exec(line);
+    if (header) {
+      section = header[1].replace(/\s/g, "");
+      if (!PROFILE_SECTIONS.has(section) || sections.has(section)) return null;
+      sections.add(section); continue;
+    }
+    const entry = /^\s*([A-Za-z0-9_-]+)\s*=\s*(true|false|"[^"\\\r\n]*"|'[^'\r\n]*')\s*(?:#.*)?$/.exec(line);
+    if (!section || !entry) return null;
+    const key = `${section}.${entry[1]}`;
+    if (values.has(key)) return null;
+    values.set(key, entry[2] === "true" ? true : entry[2] === "false" ? false : entry[2].slice(1, -1));
+  }
+  return values;
+}
+
+const REQUIRED_CONFIG = profileValues(CONFIG);
+function matchesProfile(text) {
+  const actual = profileValues(text);
+  if (!actual) return false;
+  for (const [key, value] of REQUIRED_CONFIG) {
+    if (!actual.has(key) || actual.get(key) !== value) return false;
+  }
+  for (const [key, value] of actual) {
+    if (!REQUIRED_CONFIG.has(key) && !(key === "marketplace.default_skills_installs_purged" && typeof value === "boolean")) return false;
+  }
+  return true;
+}
+
+async function writeProfileOnce(file) {
+  try { await fs.writeFile(file, CONFIG, { flag: "wx", mode: 0o600 }); }
   catch (error) {
     if (error.code !== "EEXIST") throw error;
     const stat = await fs.lstat(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || await fs.readFile(file, "utf8") !== data) {
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 64 * 1024 || !matchesProfile(await fs.readFile(file, "utf8"))) {
       throw failure("CLI_PROFILE_INVALID", "앱 전용 Grok 설정이 변경되어 연결을 중단했습니다. 연결 설정을 확인해 주세요.");
     }
   }
@@ -111,7 +150,7 @@ async function prepareGrokHome(home) {
   const directory = await privateDirectory(home);
   if (directory === path.join(os.homedir(), ".grok")) throw failure("CLI_PROFILE_INVALID", "기존 Grok 설정 대신 앱 전용 연결 폴더를 사용해 주세요.");
   // Never replace a config, inspect auth.json, or copy another application's tokens.
-  await writeOnceChecked(path.join(directory, "config.toml"), CONFIG);
+  await writeProfileOnce(path.join(directory, "config.toml"));
   await privateDirectory(path.join(directory, "connection-check"));
   return directory;
 }

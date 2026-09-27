@@ -60,7 +60,12 @@ async function command({ run, executable, signal }, args, submission = false) {
   if (signal?.aborted) throw cancelled();
   let result;
   try {
-    result = await run(executable, args, { signal, timeoutMs: submission ? SUBMIT_TIMEOUT_MS : READ_TIMEOUT_MS });
+    // CLI 0.2.0 exits immediately after console.log. Its large pretty-printed
+    // who_am_i response is truncated at the pipe buffer limit even on exit 0.
+    // The supported compact output flag keeps the current capabilities intact.
+    // Still require complete JSON below; never recover partial charged results.
+    const compactArgs = [args[0], "--quiet", ...args.slice(1)];
+    result = await run(executable, compactArgs, { signal, timeoutMs: submission ? SUBMIT_TIMEOUT_MS : READ_TIMEOUT_MS });
   } catch (error) {
     // A runner can prove that exec never started. All other submission failures
     // are uncertain, including cancellation after the upload or MCP call began.

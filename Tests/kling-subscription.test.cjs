@@ -57,8 +57,8 @@ test("Kling submission uses OAuth CLI and declared MCP names with one silent cli
   assert.equal(result.metadata.audio, false);
   assert.equal(CATALOG.supportsExternalTaskId, false);
   assert.ok(!JSON.stringify(result).includes(SECRET));
-  assert.deepEqual(calls.map(call => call.args), [["who_am_i"], [
-    "image_to_video", "--model", "kling-video-v2_6", "--image", INPUT.imagePath,
+  assert.deepEqual(calls.map(call => call.args), [["who_am_i", "--quiet"], [
+    "image_to_video", "--quiet", "--model", "kling-video-v2_6", "--image", INPUT.imagePath,
     "--duration", "5", "--resolution", "720p", "--enable_audio", "false", "--imageCount", "1", "--poll", "0", INPUT.prompt
   ]]);
   assert.ok(calls.every(call => call.executable === EXECUTABLE));
@@ -79,7 +79,37 @@ test("connection inspection returns only account credits and supported capabilit
   const result = await inspectKlingSubscription({ run, executable: EXECUTABLE });
   assert.deepEqual(result, { configured: true, authMode: "oauth", model: "kling-video-v2_6",
     durations: [5, 10], resolutions: ["720p", "1080p"], membership: "SVIP", credits: 1453 });
-  assert.deepEqual(calls.map(call => call.args), [["who_am_i"], ["account"]]);
+  assert.deepEqual(calls.map(call => call.args), [["who_am_i", "--quiet"], ["account", "--quiet"]]);
+  assert.ok(!JSON.stringify(result).includes(SECRET));
+});
+
+test("connection uses compact JSON so Kling CLI exit does not truncate capability output", async () => {
+  // CLI 0.2.0 emits pretty JSON with console.log and immediately process.exit().
+  // Its real who_am_i pipe stopped at 65,536 bytes despite exit code zero;
+  // --quiet returned a complete 49,984-byte response. Keep this fixture synthetic.
+  const body = who();
+  body.availableModels.other_tool = { models: Array.from({ length: 150 }, (_, index) => ({
+    model: `fixture-model-${index}`,
+    arguments: Array.from({ length: 5 }, () => ({ name: "fixture", required: false, default: "fixture" }))
+  })) };
+  const wire = { ok: true, status: 200, body };
+  const pretty = Buffer.from(JSON.stringify(wire, null, 2));
+  const compact = JSON.stringify(wire);
+  assert.ok(pretty.length > 65_536);
+  assert.ok(Buffer.byteLength(compact) < 65_536);
+  const calls = [];
+  const run = async (_executable, args) => {
+    calls.push(args);
+    if (args[0] === "who_am_i") return { stdout: args.includes("--quiet") ? compact : pretty.subarray(0, 65_536).toString("utf8"), stderr: SECRET, exitCode: 0 };
+    return envelope({ membershipType: "SVIP", availableRemainCredits: 1453 });
+  };
+  const result = await inspectKlingSubscription({ run, executable: EXECUTABLE });
+  assert.equal(result.configured, true);
+  assert.equal(result.authMode, "oauth");
+  assert.equal(result.membership, "SVIP");
+  assert.equal(result.credits, 1453);
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every(args => args.includes("--quiet")));
   assert.ok(!JSON.stringify(result).includes(SECRET));
 });
 
@@ -177,7 +207,7 @@ test("polling handles case-insensitive pending and failed states once per call",
     const { adapter, calls } = setup([envelope({ generationId: JOB, status, message: SECRET })]);
     const result = await adapter.poll(JOB);
     assert.equal(result.status, ["FAILED", "Cancelled", "expired"].includes(status) ? "failed" : "pending");
-    assert.deepEqual(calls[0].args, ["query_tasks", "--poll", "0", JOB]);
+    assert.deepEqual(calls[0].args, ["query_tasks", "--quiet", "--poll", "0", JOB]);
     assert.equal(calls.length, 1);
     assert.ok(!JSON.stringify(result).includes(SECRET));
   }
