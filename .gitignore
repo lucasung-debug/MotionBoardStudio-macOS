@@ -1,0 +1,14 @@
+# Local inspection materials are not part of the public source distribution.
+/reference/
+/docs/PORTING-ASSESSMENT.md
+/.local/
+/.build/
+/.swiftpm/
+/DerivedData/
+/dist/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+.env
+.env.*
+!.env.example

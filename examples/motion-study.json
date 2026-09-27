@@ -1,0 +1,121 @@
+{
+  "aspectRatio" : "landscape",
+  "duration" : 8,
+  "fps" : 30,
+  "schemaVersion" : 1,
+  "tiles" : [
+    {
+      "accent" : "#FF7555",
+      "detail" : "함께 움직이는 열여섯 장면",
+      "effect" : "reveal",
+      "id" : "911268BC-C95C-4A83-B4C3-761229328B50",
+      "title" : "한글 타이포그래피"
+    },
+    {
+      "accent" : "#64C8B5",
+      "detail" : "A soft form changes its silhouette.",
+      "effect" : "morph",
+      "id" : "B18193CF-326D-4D88-8DBE-736281331540",
+      "title" : "Morph"
+    },
+    {
+      "accent" : "#FFC857",
+      "detail" : "Small marks travel around a shared center.",
+      "effect" : "orbit",
+      "id" : "AD7A5434-B73E-4A6B-8D64-F74A4333E021",
+      "title" : "Orbit"
+    },
+    {
+      "accent" : "#9DA8FF",
+      "detail" : "A row of bars rises in a repeating rhythm.",
+      "effect" : "bars",
+      "id" : "9E563807-6686-4463-A20A-1FBAFE29E4CB",
+      "title" : "Bars"
+    },
+    {
+      "accent" : "#FF7555",
+      "detail" : "A line carries a wave across the frame.",
+      "effect" : "wave",
+      "id" : "F9F28991-F15C-41C9-8ACE-2360CF55CB31",
+      "title" : "Wave"
+    },
+    {
+      "accent" : "#64C8B5",
+      "detail" : "Concentric outlines expand from the center.",
+      "effect" : "rings",
+      "id" : "EE822E5B-5510-45A0-8C27-22E8D64C7469",
+      "title" : "Rings"
+    },
+    {
+      "accent" : "#FFC857",
+      "detail" : "Separate elements arrive one after another.",
+      "effect" : "stagger",
+      "id" : "1924D055-0782-4096-B3FC-9AD0F215F0AB",
+      "title" : "Stagger"
+    },
+    {
+      "accent" : "#9DA8FF",
+      "detail" : "A number advances as a timing study.",
+      "effect" : "counter",
+      "id" : "464866DE-C196-40F3-98BF-9CE66EDB08D1",
+      "title" : "Counter"
+    },
+    {
+      "accent" : "#FF7555",
+      "detail" : "A pool of light moves over a quiet field.",
+      "effect" : "spotlight",
+      "id" : "AC9E0D75-5E35-4285-B0CA-77ADD0031119",
+      "title" : "Spotlight"
+    },
+    {
+      "accent" : "#64C8B5",
+      "detail" : "A line of type moves at a steady pace.",
+      "effect" : "marquee",
+      "id" : "D59D7D1B-90AD-4B75-A4EF-4FDC281234ED",
+      "title" : "Marquee"
+    },
+    {
+      "accent" : "#FFC857",
+      "detail" : "An outline traces its own path.",
+      "effect" : "draw",
+      "id" : "CDED5E3B-4D33-4868-B622-5F96CFAF95A4",
+      "title" : "Draw"
+    },
+    {
+      "accent" : "#9DA8FF",
+      "detail" : "Offset cards settle into a layered arrangement.",
+      "effect" : "stack",
+      "id" : "668A85CC-8EB4-45F7-B41C-5B21B4E4CC84",
+      "title" : "Stack"
+    },
+    {
+      "accent" : "#FF7555",
+      "detail" : "Two halves separate and return to the center.",
+      "effect" : "split",
+      "id" : "251719C3-2A38-42C5-882B-4541F086DC04",
+      "title" : "Split"
+    },
+    {
+      "accent" : "#64C8B5",
+      "detail" : "A single form rises and settles.",
+      "effect" : "bounce",
+      "id" : "7429C407-56F2-4B92-A57C-76162605D8C2",
+      "title" : "Bounce"
+    },
+    {
+      "accent" : "#FFC857",
+      "detail" : "A field of cells changes in a repeating pattern.",
+      "effect" : "grid",
+      "id" : "EE6B7CD8-9E29-4577-87EE-BDC10F54DB79",
+      "title" : "Grid"
+    },
+    {
+      "accent" : "#9DA8FF",
+      "detail" : "A central form grows and softens with each beat.",
+      "effect" : "pulse",
+      "id" : "64F593F7-0A4C-4425-B576-0BFB3DE5904B",
+      "title" : "Pulse"
+    }
+  ],
+  "title" : "Motion studies · 모션 스터디"
+}

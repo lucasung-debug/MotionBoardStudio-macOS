@@ -1,0 +1,40 @@
+{
+  "cancellationPreservesExistingDestination" : true,
+  "checkedAt" : "2026-09-27T02:54:10Z",
+  "fractionalDurationAndFourSampleBlur" : true,
+  "inFlightCancellationAfterFirstFrame" : true,
+  "limits" : [
+    "This is a synthetic offline board, not parity with the Windows application.",
+    "Live provider integration, audio, sustained 1080p60 performance, and manual native UI acceptance are not verified by this command."
+  ],
+  "pngChecks" : [
+    {
+      "aspect" : "landscape",
+      "height" : 720,
+      "loopByteIdentical" : true,
+      "width" : 1280
+    },
+    {
+      "aspect" : "square",
+      "height" : 1280,
+      "loopByteIdentical" : true,
+      "width" : 1280
+    },
+    {
+      "aspect" : "portrait",
+      "height" : 1280,
+      "loopByteIdentical" : true,
+      "width" : 720
+    }
+  ],
+  "runtime" : "Native macOS WKWebView Canvas and AVFoundation; no provider requests",
+  "video" : {
+    "durationSeconds" : 2,
+    "fps" : 24,
+    "frames" : 48,
+    "height" : 270,
+    "presentationTimestampsMatch" : true,
+    "width" : 480
+  },
+  "videoSHA256" : "e0660b393153da228367afebd1b9dd523846c747b10ac8bd70acb303e484014a"
+}

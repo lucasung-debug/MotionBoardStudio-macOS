@@ -1,0 +1,51 @@
+/* Original presentation styles. Motion itself is drawn only by board.js. */
+:root {
+  color-scheme: light;
+  background: #f3f0e9;
+  color: #262925;
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-width: 0;
+  min-height: 100%;
+  background: #f3f0e9;
+}
+
+body { -webkit-font-smoothing: antialiased; }
+
+[data-board-host] {
+  width: 100%;
+  overflow: hidden;
+}
+
+#board {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+  background: #f3f0e9;
+}
+
+.board-error {
+  max-width: 38rem;
+  margin: 2rem auto;
+  padding: 1.5rem;
+  color: #7b3728;
+  line-height: 1.6;
+}
+
+button, input, select { font: inherit; }
+
+button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid #49604b;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Playback is controlled by the host, which can inspect this preference. */
+  :root { scroll-behavior: auto; }
+}
