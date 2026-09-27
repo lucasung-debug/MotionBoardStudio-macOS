@@ -52,7 +52,7 @@ scripts/build-dmg.sh
 
 The default app output is `dist/MotionBoard Studio 0.3.2-mac.3.app`; pass a different destination as the first argument to preserve an existing bundle. The DMG script accepts an app path and a new DMG destination. Both scripts refuse to overwrite existing outputs. The arm64 build includes official Node.js 24.21.0 and a separately compiled FFmpeg executable with system-only dependencies. Its FFmpeg build disables GPL/nonfree components and uses Apple's VideoToolbox for H.264 output. The exact FFmpeg source, license texts, release signature, and build recipe are included inside the app.
 
-See [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the packaging procedure and verification scope. The source checkout still supports an independently installed FFmpeg.
+See [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the packaging procedure, the Developer ID/notarization release workflow, and verification scope. `python3 scripts/release-macos.py --check` checks the distributor's signing prerequisites before attempting a new release. The source checkout still supports an independently installed FFmpeg.
 
 ## Verification
 

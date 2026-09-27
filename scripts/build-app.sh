@@ -5,7 +5,12 @@ cd "$project_root"
 if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]]; then
   export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 fi
-destination="${1:-$project_root/dist/MotionBoard Studio 0.3.2-mac.3.app}"
+build_number="${MOTION_BOARD_BUILD_NUMBER:-3}"
+if [[ ! "$build_number" =~ ^[1-9][0-9]*$ ]]; then
+  echo "MOTION_BOARD_BUILD_NUMBER must be a positive integer." >&2
+  exit 1
+fi
+destination="${1:-$project_root/dist/MotionBoard Studio 0.3.2-mac.$build_number.app}"
 if [[ -e "$destination" ]]; then
   echo "Output already exists; choose a new output path: $destination" >&2
   exit 1
@@ -67,6 +72,15 @@ cat > "$destination/Contents/Info.plist" <<'PLIST'
   <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict></plist>
 PLIST
+python3 - "$destination/Contents/Info.plist" "$build_number" <<'PY'
+import plistlib
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+info = plistlib.loads(path.read_bytes())
+info['CFBundleVersion'] = sys.argv[2]
+path.write_bytes(plistlib.dumps(info, sort_keys=False))
+PY
 codesign --force --sign - "$destination/Contents/MacOS/node"
 codesign --force --sign - "$destination/Contents/MacOS/ffmpeg"
 codesign --force --sign - "$destination/Contents/MacOS/ffprobe"
