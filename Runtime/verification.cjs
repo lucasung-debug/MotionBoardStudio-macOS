@@ -61,7 +61,13 @@ async function createVerification({sourceRoot, userData, nativeCall}) {
   };
   const status = async () => ({loggedIn:true,source:'offline-verification'});
   const authServices = {chatgpt:{status,getAuth:async()=>({accessToken:'fixture-token',accountId:'fixture-account'})},claude:{status,getAuth:async()=>({token:'fixture-token'})}};
-  const injections = {authServices, testProviders:{codex:{chat,generateImage:async()=>({buffer:fixturePNG(),model:'offline-fixture'})},claude:{chat},fetchImpl:globalThis.fetch}};
+  const injections = {authServices, testProviders:{codex:{chat,generateImage:async()=>({buffer:fixturePNG(),model:'offline-fixture'})},claude:{chat},fetchImpl:globalThis.fetch,
+    subscriptionConnections: {
+      providers: async () => ({ok:true,providers:Object.values(require('./subscription-video-providers.cjs').PROVIDERS).map(info=>({...info,installed:false,configured:false,statusMessage:'오프라인 검증: 실제 구독 계정에 연결하지 않았습니다.'}))}),
+      client: async () => {throw new Error('Real CLI generation is forbidden in offline verification.');},
+      configure: async () => {throw new Error('Real subscription login is forbidden in offline verification.');},
+      disconnect: async () => ({ok:true,configured:false})
+    }}};
 
   async function run(engine, { fullSize = false } = {}) {
     if (fullSize) {

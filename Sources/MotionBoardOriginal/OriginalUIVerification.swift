@@ -328,6 +328,20 @@ enum OriginalUIVerification {
         const providerSelect=document.getElementById('imageVideoProvider');
         const providerIDs=[...providerSelect.options].map(option=>option.value);
         if (!providerIDs.includes('grok') || !providerIDs.includes('kling') || providerSelect.disabled) throw new Error('Grok and Kling provider choices are unavailable.');
+        const subscriptionControlIDs=['configureImageProviderBtn','refreshImageProviderBtn','disconnectImageProviderBtn','imageProviderPricingBtn','imageProviderSetupBtn'];
+        const subscriptionLabels=Object.fromEntries(subscriptionControlIDs.map(id=>[id,document.getElementById(id)?.textContent.trim()]));
+        const usageNote=document.querySelector('.scene-billing-note').textContent;
+        const creationNote=document.getElementById('imageCreationNote').textContent;
+        if (subscriptionControlIDs.some(id=>!subscriptionLabels[id])
+          || /API/i.test([...Object.values(subscriptionLabels),usageNote,creationNote,document.getElementById('imageProviderStatus').textContent,
+            document.getElementById('imageProviderHint').textContent,document.getElementById('sceneActionHint').textContent].join(' ')))
+          throw new Error('Subscription video controls still show an API connection or billing route.');
+        if (![usageNote,creationNote].every(text=>['Grok','Kling','구독','크레딧'].every(word=>text.includes(word)))
+          || !document.getElementById('creationHint').textContent.includes('구독')
+          || !['구독 연결 / 확인','연결 확인'].includes(subscriptionLabels.configureImageProviderBtn)
+          || subscriptionLabels.disconnectImageProviderBtn!=='앱에서 연결 해제'
+          || document.getElementById('refreshImageProviderBtn').disabled)
+          throw new Error('Subscription usage, local disconnect, or connection refresh controls are missing.');
 
         // Observe the actual bridge boundary. The env canary proves that the
         // observer is active; every other call is blocked during the UI edit.
@@ -428,7 +442,8 @@ enum OriginalUIVerification {
         await document.fonts.ready;
         await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
         return {creationModes:['motion_graphics','image_video'],creationCTAs:{motion:motionCTA,image:imageCTA},secretFields:0,
-          providerIDs,providerChange,sceneCount:16,selectedScenes:2,loadedThumbnails:16,scenes,
+          providerIDs,providerChange,subscriptionConnection:{apiKeyControls:false,refreshAvailable:true,labels:subscriptionLabels,usageNote},
+          sceneCount:16,selectedScenes:2,loadedThumbnails:16,scenes,
           finalVideo:{...finalVideo,separateFromMotion:true,selectedDuration:2},originalMotionVideoPreserved:true,
           importedClipsAreFixtures:true,realProviderGenerationTested:false};
         """, timeout: 90)

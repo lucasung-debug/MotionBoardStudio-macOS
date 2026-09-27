@@ -218,7 +218,7 @@ function updateImageChoice() {
   $('outputModeField').hidden = imageMode;
   $('imageCreationNote').hidden = !imageMode;
   $('creationHint').textContent = imageMode
-    ? '보드의 인물과 사물을 움직이는 영상으로 만듭니다. 최종 길이는 선택한 장면 길이의 합계입니다.'
+    ? 'Grok·Kling 구독 계정으로 보드의 인물과 사물을 움직이는 영상으로 만듭니다. 최종 길이는 선택한 장면 길이의 합계입니다.'
     : '명세와 보드의 색·문구를 바탕으로 모션 그래픽을 만듭니다.';
   $('durationLabel').textContent = imageMode ? '명세 기준 길이 (초)' : '길이 (초)';
   for (const radio of document.querySelectorAll('input[name="creationMode"]')) radio.checked = radio.value === creationMode;
@@ -528,14 +528,23 @@ function renderImageProvider() {
     resolutionOptions.push({ value: imageDraft.resolution, label: `${imageDraft.resolution} (현재 설정)` });
   }
   setOptions($('imageVideoResolution'), resolutionOptions, imageDraft?.resolution);
-  $('imageProviderStatus').textContent = imageProvidersError || (provider?.configured ? '영상 API 연결됨' : '영상 API 미연결');
-  $('configureImageProviderBtn').textContent = provider?.configured ? 'API 연결 변경' : '영상 API 연결';
+  const status = provider?.statusMessage || (provider?.configured ? '구독 계정 연결됨'
+    : provider?.installed ? 'CLI 설치됨 · 구독 로그인 확인 필요' : '구독 연결에 사용할 CLI를 설정해 주세요.');
+  const accountDetails = [];
+  if (provider?.configured) {
+    if (typeof provider.membership === 'string' && provider.membership.trim()) accountDetails.push(provider.membership.trim());
+    if (typeof provider.credits === 'number' && Number.isFinite(provider.credits) && provider.credits >= 0) {
+      accountDetails.push(`잔여 ${provider.credits.toLocaleString('ko-KR')} 크레딧`);
+    }
+  }
+  $('imageProviderStatus').textContent = imageProvidersError || [status, ...accountDetails].join(' · ');
+  $('configureImageProviderBtn').textContent = provider?.configured ? '연결 확인' : '구독 연결 / 확인';
   $('disconnectImageProviderBtn').hidden = !provider?.configured;
   $('imageProviderPricingBtn').hidden = !imageProviderURL('pricingURL');
   $('imageProviderSetupBtn').hidden = !imageProviderURL('setupURL');
   $('imageProviderHint').textContent = provider
-    ? `${provider.label}${provider.model ? ` · ${provider.model}` : ''} · 장면 길이 ${providerDurations(provider).map(value => `${value}초`).join(' / ')}. 클립 가져오기와 합치기는 API 연결 없이 사용할 수 있습니다.`
-    : '클립 가져오기와 합치기는 API 연결 없이 사용할 수 있습니다.';
+    ? `${provider.label}${provider.model ? ` · ${provider.model}` : ''} · 장면 길이 ${providerDurations(provider).map(value => `${value}초`).join(' / ')}. 클립 가져오기와 합치기는 구독 연결 없이 사용할 수 있습니다.`
+    : '클립 가져오기와 합치기는 구독 연결 없이 사용할 수 있습니다.';
 }
 
 function renderSceneGrid() {
@@ -659,6 +668,7 @@ function refreshImageControls() {
   $('imageVideoProvider').disabled = busy || !imageDraft || !imageProviders.length || pending.length > 0;
   $('imageVideoResolution').disabled = busy || !provider || pending.length > 0;
   $('configureImageProviderBtn').disabled = busy || !provider;
+  $('refreshImageProviderBtn').disabled = busy || !supported;
   $('disconnectImageProviderBtn').disabled = busy || !provider?.configured || pending.length > 0;
   $('recoverSceneBtn').disabled = busy || shot?.status !== 'uncertain';
   for (const id of ['sceneTitle', 'scenePrompt', 'sceneDuration']) {
@@ -678,7 +688,7 @@ function refreshImageControls() {
   const notes = [`선택한 ${selection.shots.length}개 중 클립 ${selection.ready}개 준비됨.`];
   if (eligible.length) notes.push(`새 생성 대상 ${eligible.length}개 · ${sceneSeconds(eligible.reduce((sum, item) => sum + Number(item.duration || 0), 0))}초.`);
   if (pending.length) notes.push(`확인이 필요한 요청 ${pending.length}개는 다시 전송하지 않습니다.`);
-  if (eligible.length && !provider?.configured) notes.push('영상 API를 연결하거나 직접 만든 클립을 가져오세요.');
+  if (eligible.length && !provider?.configured) notes.push('구독 계정을 연결하거나 직접 만든 클립을 가져오세요.');
   if (eligible.length && provider && !validGeneration) notes.push('생성할 장면의 지시문, 지원 길이, 해상도를 확인하세요.');
   $('sceneActionHint').textContent = notes.join(' ');
 }
@@ -722,7 +732,7 @@ async function performImageAction(message, action, { save = true } = {}) {
     const result = await action();
     if (!result) return;
     if (result.entry) { imageDraftDirty = false; renderEntry(result.entry, { focus: 'image-video' }); }
-    if (result.canceled) { setStatus('작업을 취소했습니다.'); return; }
+    if (result.canceled) { setStatus(result.message || '작업을 취소했습니다.'); return; }
     if (!result.ok) {
       const error = result.error || '이미지 영상 작업을 완료하지 못했습니다.';
       $('imageVideoError').textContent = error;
@@ -789,18 +799,24 @@ function bindImageVideoEvents() {
       return { ...result, message: '저장된 장면 설정으로 되돌렸습니다.' };
     }, { save: false });
   });
-  $('configureImageProviderBtn').addEventListener('click', () => performImageAction('영상 API 연결을 설정하는 중…', async () => {
+  $('configureImageProviderBtn').addEventListener('click', () => performImageAction('구독 계정 연결을 확인하는 중…', async () => {
     const provider = imageDraft?.provider;
     if (!provider) return;
     const result = await api.imageVideo.configure({ provider });
     await loadImageProviders();
-    return { ...result, message: result.configured ? '영상 API를 연결했습니다.' : '영상 API 연결을 확인해 주세요.' };
-  }));
-  $('disconnectImageProviderBtn').addEventListener('click', () => performImageAction('영상 API 연결을 해제하는 중…', async () => {
+    return { ...result, message: result.message || (result.canceled ? '구독 연결 확인을 취소했습니다.'
+      : result.configured ? '구독 계정 연결을 확인했습니다.' : '구독 계정 로그인 후 상태를 새로고침해 주세요.') };
+  }, { save: false }));
+  $('refreshImageProviderBtn').addEventListener('click', () => performImageAction('구독 계정 상태를 확인하는 중…', async () => {
+    await loadImageProviders();
+    return imageProvidersError ? { ok: false, error: imageProvidersError }
+      : { ok: true, message: $('imageProviderStatus').textContent };
+  }, { save: false }));
+  $('disconnectImageProviderBtn').addEventListener('click', () => performImageAction('이 앱의 구독 연결을 해제하는 중…', async () => {
     const result = await api.imageVideo.disconnect({ provider: imageDraft.provider });
     await loadImageProviders();
-    return { ...result, message: '영상 API 연결을 해제했습니다. 기존 클립은 유지됩니다.' };
-  }));
+    return { ...result, message: result.message || '이 앱의 연결을 해제했습니다. CLI 로그인과 기존 클립은 유지됩니다.' };
+  }, { save: false }));
   for (const [id, kind] of [['imageProviderPricingBtn', 'pricingURL'], ['imageProviderSetupBtn', 'setupURL']]) {
     $(id).addEventListener('click', async () => {
       const url = imageProviderURL(kind);

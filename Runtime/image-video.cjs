@@ -5,7 +5,8 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const dns = require("node:dns/promises");
 const net = require("node:net");
-const { createVideoProvider, PROVIDERS } = require("./video-providers.cjs");
+const { createVideoProvider } = require("./video-providers.cjs");
+const { PROVIDERS, createSubscriptionConnections } = require("./subscription-video-providers.cjs");
 const { createImageVideoMedia } = require("./image-video-media.cjs");
 
 const abort = signal => { if (signal?.aborted) throw Object.assign(new Error("작업을 취소했습니다. 이미 요청한 외부 영상은 장면 상태 확인으로 다시 불러올 수 있습니다."), { code: "CANCELLED" }); };
@@ -50,6 +51,7 @@ async function downloadVideo(url, target, { signal, atomicWrite, fetchImpl = fet
 function createImageVideoService({ sourceRoot, store, nativeCall, getEntry, rememberAuth, errorMessage = error => error.message, testProviders = {} }) {
   const media = testProviders.imageVideoMedia || createImageVideoMedia({ sourceRoot });
   const makeProvider = testProviders.createVideoProvider || createVideoProvider;
+  const connections = testProviders.subscriptionConnections || createSubscriptionConnections({ store, nativeCall });
   const musicPipeline = require(path.join(sourceRoot, "lib/video/pipeline.cjs"));
   const providerInfo = provider => {
     const info = PROVIDERS[provider];
@@ -64,27 +66,26 @@ function createImageVideoService({ sourceRoot, store, nativeCall, getEntry, reme
   async function credentials(provider) {
     providerInfo(provider);
     const result = await nativeCall("vault.read", { account: provider + "-video" });
-    if (!result.value) throw fail("먼저 영상 API를 연결해 주세요. 앱의 ChatGPT·Claude 로그인과는 별도입니다.", "VIDEO_PROVIDER_UNCONFIGURED");
+    if (!result.value) throw fail("이 작업은 이전 API 연결로 요청되었습니다. 서비스에서 결과를 내려받아 클립 가져오기로 연결해 주세요.", "VIDEO_PROVIDER_UNCONFIGURED");
     let value;
     try { value = JSON.parse(result.value); } catch { throw fail("저장한 영상 API 정보를 다시 입력해 주세요.", "VIDEO_PROVIDER_UNCONFIGURED"); }
     rememberAuth(value);
     return value;
   }
-  const client = async provider => makeProvider({ provider, credentials: await credentials(provider), fetchImpl: testProviders.fetchImpl || fetch });
-
-  async function providers() {
-    const providers = [];
-    for (const info of Object.values(PROVIDERS)) {
-      const result = await nativeCall("videoCredentials.status", { provider: info.id });
-      providers.push({ ...info, configured: Boolean(result.configured) });
-    }
-    return { ok: true, providers };
+  const cliWorkDir = (id, localId) => {
+    if (typeof localId !== "string" || !/^[A-Za-z0-9-]{1,100}$/.test(localId)) throw fail("저장된 영상 작업 경로를 확인할 수 없습니다.");
+    return path.join(store.videoDirFor(id), "image-video", "jobs", localId, "grok");
+  };
+  async function client(provider, { id, job, polling = false } = {}) {
+    // Jobs created before the subscription adapters retain their original API
+    // route. New submissions never fall back to that route or request API keys.
+    if (polling && !job?.transport) return makeProvider({ provider, credentials: await credentials(provider), fetchImpl: testProviders.fetchImpl || fetch });
+    if (job?.transport && job.transport !== providerInfo(provider).transport) throw fail("저장된 작업의 연결 방식이 지원되지 않습니다.");
+    return connections.client(provider, { workDir: cliWorkDir(id, job.localId), polling });
   }
-  async function configure({ provider }) { providerInfo(provider); return { ok: true, ...(await nativeCall("videoCredentials.configure", { provider })) }; }
-  async function disconnect({ provider }) {
-    providerInfo(provider); await nativeCall("vault.delete", { account: provider + "-video" });
-    return { ok: true, configured: false };
-  }
+  const providers = () => connections.providers();
+  const configure = input => connections.configure(input);
+  const disconnect = input => connections.disconnect(input);
   function publicPlan(plan) {
     if (!plan) return null;
     return { revision: plan.revision, boardFingerprint: plan.boardFingerprint, provider: plan.provider,
@@ -94,7 +95,8 @@ function createImageVideoService({ sourceRoot, store, nativeCall, getEntry, reme
         duration: shot.duration, status: shot.status, error: shot.error || "",
         imageUrl: store.imageUrlForPath(shot.imagePath), videoUrl: store.videoUrlFor(shot.clipPath),
         sourceWidth: shot.sourceWidth, sourceHeight: shot.sourceHeight, imported: Boolean(shot.imported),
-        jobId: shot.job?.jobId || "", jobProvider: shot.job?.provider || ""
+        jobId: shot.job?.jobId || "", jobProvider: shot.job?.provider || "", jobTransport: shot.job?.transport || "",
+        creditsConsumed: Number.isFinite(shot.job?.metadata?.creditsConsumed) ? shot.job.metadata.creditsConsumed : null
       })), output: plan.output ? { videoUrl: store.videoUrlFor(plan.output.videoPath),
         posterUrl: store.videoUrlFor(plan.output.posterPath), videoMeta: plan.output.videoMeta } : null };
   }
@@ -150,10 +152,10 @@ function createImageVideoService({ sourceRoot, store, nativeCall, getEntry, reme
     if (!Array.isArray(shotIds) || !shotIds.length || shotIds.length > 16 || new Set(shotIds).size !== shotIds.length) throw fail("생성할 장면을 선택해 주세요.");
     const selected = shotIds.map(id => plan.shots.find(shot => shot.id === id));
     if (selected.some(shot => !shot || !shot.enabled || !["draft", "failed"].includes(shot.status))) throw fail("아직 만들지 않았거나 실패한 장면만 요청할 수 있습니다. 대기 중인 장면은 상태 확인을 눌러 주세요.");
-    const service = await client(plan.provider); abort(signal);
+    abort(signal);
     const seconds = selected.reduce((sum, shot) => sum + shot.duration, 0);
     const approval = await nativeCall("dialog.message", { options: { title: "이미지 영상 생성", message: `${info.label}에 ${selected.length}개 장면 · 총 ${seconds}초를 요청할까요?`,
-      detail: `선택한 원본 이미지와 움직임 설명이 ${info.label}로 전송됩니다. ${info.model} · ${plan.resolution}. 영상 API 사용 요금은 해당 서비스에서 별도로 청구합니다. 요청 후 앱을 취소해도 이미 접수된 외부 작업과 요금이 취소되는 것은 아닙니다.`,
+      detail: `선택한 원본 이미지와 움직임 설명이 ${info.label}로 전송됩니다. ${info.model} · ${plan.resolution}. 연결한 구독 계정의 사용량 또는 크레딧을 사용합니다. 요청 후 앱을 취소해도 이미 접수된 외부 작업과 사용량이 취소되는 것은 아닙니다.`,
       buttons: ["요청하기", "취소"], defaultId: 1, cancelId: 1 } });
     if (approval.response !== 0) return { ...entry, operationCanceled: true };
     abort(signal);
@@ -163,25 +165,31 @@ function createImageVideoService({ sourceRoot, store, nativeCall, getEntry, reme
       const imageBytes = await fs.readFile(shot.imagePath);
       const localId = crypto.randomUUID();
       if (shot.job) shot.previousJobs = [...(shot.previousJobs || []), shot.job];
-      shot.job = { localId, externalTaskId: localId, provider: plan.provider, model: info.model, resolution: plan.resolution,
+      shot.job = { localId, externalTaskId: localId, provider: plan.provider, transport: info.transport, model: info.model, resolution: plan.resolution,
         imageSha256: sha256(imageBytes), requestedAt: Date.now(), duration: shot.duration };
+      // Grok's CLI result is a local durable receipt keyed by our request ID.
+      // Recording that key first allows read-only recovery after an app restart.
+      if (info.transport === "grok-cli") shot.job.jobId = localId;
       shot.status = "submitting"; shot.error = "";
       entry = await writePlan(id, plan, { signal }); plan = entry.imageVideo;
       const active = plan.shots.find(item => item.id === shot.id);
       report({ phase: "image_video_submit", message: `${active.title} — ${info.label}에 생성 요청 중…`, entryId: id });
+      let acknowledged = false;
       try {
-        const result = await service.submit({ imageBase64: imageBytes.toString("base64"), mediaType: "image/png",
+        const service = await client(plan.provider, { id, job: active.job });
+        const result = await service.submit({ imagePath: active.imagePath, imageBase64: imageBytes.toString("base64"), mediaType: "image/png",
           prompt: active.prompt, duration: active.duration, aspectRatio: entry.input?.aspectRatio || "1:1",
           resolution: plan.resolution, externalTaskId: localId }, { signal });
         if (!result.jobId) throw fail("외부 서비스의 작업 번호를 확인하지 못했습니다.", "SUBMISSION_UNCONFIRMED");
         active.job.jobId = result.jobId; active.job.metadata = result.metadata; active.status = "pending";
+        acknowledged = true;
         // Save an accepted remote ID even if local cancellation arrives late.
         entry = await writePlan(id, plan); plan = entry.imageVideo;
         abort(signal);
       } catch (error) {
-        if (!active.job.jobId) {
+        if (!acknowledged) {
           active.status = error.code === "SUBMISSION_UNCONFIRMED" ? "uncertain" : error.code === "CANCELLED" ? "draft" : "failed";
-          active.error = active.status === "uncertain" ? "요청 접수 여부를 확인해야 합니다. 중복 과금을 막기 위해 자동으로 다시 요청하지 않습니다." : String(errorMessage(error)).slice(0, 500);
+          active.error = active.status === "uncertain" ? "요청 접수 여부를 확인해야 합니다. 구독 사용량의 중복 소모를 막기 위해 자동으로 다시 요청하지 않습니다." : String(errorMessage(error)).slice(0, 500);
           entry = await writePlan(id, plan); plan = entry.imageVideo;
         }
         throw error;
@@ -198,16 +206,36 @@ function createImageVideoService({ sourceRoot, store, nativeCall, getEntry, reme
       if (shot.status === "submitting") {
         shot.status = "uncertain"; shot.error = "앱 종료 전에 요청 결과가 저장되지 않았습니다. 서비스에서 접수 여부를 확인해 주세요.";
         entry = await writePlan(id, plan, { signal }); plan.revision = entry.imageVideo.revision;
+        if (shot.job?.transport !== "grok-cli") continue;
+      }
+      const recoveringCLI = shot.status === "uncertain" && shot.job?.transport === "grok-cli";
+      if (shot.status !== "pending" && !recoveringCLI || !shot.job?.jobId) continue;
+      report({ phase: "image_video_poll", message: `${shot.title} — 생성 상태를 확인하는 중…`, entryId: id });
+      const service = await client(shot.job.provider, { id, job: shot.job, polling: true });
+      let result;
+      try { result = await service.poll(shot.job.jobId, { signal }); }
+      catch (error) {
+        if (!recoveringCLI || error.code !== "SUBMISSION_UNCONFIRMED") throw error;
+        shot.error = "CLI 완료 기록을 아직 확인하지 못했습니다. 구독 서비스의 생성 내역을 확인하거나 완성된 클립을 가져와 주세요.";
+        entry = await writePlan(id, plan, { signal }); plan.revision = entry.imageVideo.revision;
         continue;
       }
-      if (shot.status !== "pending" || !shot.job?.jobId) continue;
-      report({ phase: "image_video_poll", message: `${shot.title} — 생성 상태를 확인하는 중…`, entryId: id });
-      const service = await client(shot.job.provider), result = await service.poll(shot.job.jobId, { signal });
       if (result.status === "failed") { shot.status = "failed"; shot.error = result.error || "영상 서비스에서 생성에 실패했습니다."; }
       else if (result.status === "succeeded") {
         const target = path.join(store.videoDirFor(id), "image-video", "jobs", shot.job.localId, "clip.mp4");
-        const download = testProviders.downloadImageVideo || downloadVideo;
-        await download(result.videoUrl, target, { signal, atomicWrite: store.atomicWrite, fetchImpl: testProviders.fetchImpl || fetch });
+        if (result.videoPath) {
+          // CLI output is accepted only from this job's private directory. A
+          // model-provided path must never turn the app into an arbitrary reader.
+          const root = await fs.realpath(cliWorkDir(id, shot.job.localId));
+          const source = await fs.realpath(result.videoPath), relative = path.relative(root, source);
+          const stat = await fs.stat(source);
+          if (!relative || relative.startsWith(".." + path.sep) || path.isAbsolute(relative) || !stat.isFile() || stat.size > 256 * 1024 * 1024) throw fail("CLI가 반환한 영상 파일 경로를 확인할 수 없습니다.");
+          abort(signal);
+          await store.atomicWrite(target, await fs.readFile(source), { signal });
+        } else {
+          const download = testProviders.downloadImageVideo || downloadVideo;
+          await download(result.videoUrl, target, { signal, atomicWrite: store.atomicWrite, fetchImpl: testProviders.fetchImpl || fetch });
+        }
         try {
           const probe = await media.probeClip(target, { signal });
           abort(signal);
@@ -231,7 +259,7 @@ function createImageVideoService({ sourceRoot, store, nativeCall, getEntry, reme
     const info = providerInfo(shot.job?.provider || plan.provider);
     const answer = await nativeCall("dialog.message", { options: {
       message: `${shot.title}의 미접수를 ${info.label}에서 확인하셨나요?`,
-      detail: `서비스의 작업 내역에서 이 요청이 접수되지 않았음을 확인한 경우에만 다시 준비하세요. 이미 접수된 작업을 재생성하면 요금이 중복 청구될 수 있습니다. 완성된 영상은 클립 가져오기로 연결할 수 있습니다.\n앱 요청 번호: ${shot.job?.externalTaskId || "없음"}`,
+      detail: `서비스의 작업 내역에서 이 요청이 접수되지 않았음을 확인한 경우에만 다시 준비하세요. 이미 접수된 작업을 재생성하면 사용량이 중복 소모될 수 있습니다. 완성된 영상은 클립 가져오기로 연결할 수 있습니다.\n앱 요청 번호: ${shot.job?.externalTaskId || "없음"}`,
       buttons: ["미접수 확인 · 다시 준비", "취소"], defaultId: 1, cancelId: 1
     } });
     if (answer.response !== 0) return { ...entry, operationCanceled: true };

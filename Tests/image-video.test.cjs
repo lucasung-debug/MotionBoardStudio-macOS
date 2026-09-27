@@ -8,6 +8,7 @@ const os = require("node:os");
 const { createEngine } = require("../Runtime/engine.cjs");
 const { createStore } = require("../Runtime/store.cjs");
 const { isPublicAddress } = require("../Runtime/image-video.cjs");
+const { PROVIDERS } = require("../Runtime/subscription-video-providers.cjs");
 const sourceRoot = path.resolve(__dirname, "../upstream/MotionBoardStudio-0.3.2");
 const deferred = () => { let resolve; return { promise: new Promise(done => { resolve = done; }), resolve: value => resolve(value) }; };
 
@@ -43,6 +44,15 @@ async function setup(t) {
       renderer: { shutdown: async () => {} },
       fetchImpl: async () => { throw new Error("Network is forbidden in service fixtures."); },
       createVideoProvider: () => ({ submit: (...args) => controls.submit(...args), poll: (...args) => controls.poll(...args) }),
+      subscriptionConnections: {
+        providers: async () => ({ ok: true, providers: Object.values(PROVIDERS).map(info => ({ ...info, installed: true, configured: true })) }),
+        client: async (provider, options) => {
+          controls.clientOptions = { provider, ...options };
+          return { submit: (...args) => controls.submit(...args), poll: (...args) => controls.poll(...args) };
+        },
+        configure: async () => ({ ok: true, configured: true }),
+        disconnect: async () => ({ ok: true, configured: false })
+      },
       downloadImageVideo: async (url, file, { atomicWrite, signal }) => atomicWrite(file, "downloaded synthetic clip", { signal }),
       imageVideoMedia: {
         prepareBoard: async ({ entryId }) => {
@@ -96,6 +106,7 @@ test("native confirmation is required and cancelled requests create no remote or
   assert.equal(result.entry.imageVideo.shots[0].status, "draft");
   const dialog = f.calls.find(call => call.method === "dialog.message").params.options;
   assert.match(dialog.message, /2개 장면 · 총 10초/); assert.equal(dialog.defaultId, 1);
+  assert.match(dialog.detail, /구독 계정/); assert.doesNotMatch(dialog.detail, /API 사용 요금/);
   assert.doesNotMatch(JSON.stringify(result), /synthetic-secret/);
 });
 
@@ -104,6 +115,8 @@ test("accepted jobs survive restart, block duplicate submission, and keep the fi
   const submitted = await f.invoke("imageVideoGenerate", { shotIds: ["scene-1", "scene-2"] });
   assert.equal(submitted.ok, true, submitted.error);
   assert.equal(f.controls.submitted.length, 2);
+  assert.equal((await f.state()).imageVideo.shots[0].job.transport, "grok-cli");
+  assert.equal(f.calls.filter(call => call.method === "vault.read").length, 0);
   await f.restart();
   assert.equal((await f.invoke("imageVideoGenerate", { shotIds: ["scene-1"] })).ok, false);
   f.controls.poll = async jobId => {
@@ -207,16 +220,63 @@ test("offline clip import and export work without credentials and retain separat
   assert.equal(f.controls.submitted.length, 0);
 });
 
-test("provider credentials stay out of public results and progress even in a thrown error", async t => {
+test("legacy API polls retain their route and keep credentials out of errors and history", async t => {
   const f = await setup(t); await f.prepare(); f.controls.approval = 0;
   const providers = await f.invoke("imageVideoProviders");
   assert.equal(providers.providers[0].configured, true);
-  f.controls.submit = async () => { throw new Error("fixture failure " + f.credentials.apiKey); };
-  const failed = await f.invoke("imageVideoGenerate", { shotIds: ["scene-1"] });
+  const plan = (await f.state()).imageVideo;
+  plan.shots[0].status = "pending";
+  plan.shots[0].job = { provider: "grok", jobId: "legacy-job", localId: "legacy-local" };
+  await f.store.updateEntry(f.id, { imageVideo: plan });
+  f.controls.poll = async () => { throw new Error("fixture failure " + f.credentials.apiKey); };
+  const failed = await f.invoke("imageVideoRefresh");
   const history = await f.invoke("historyGet");
   assert.doesNotMatch(JSON.stringify([providers, failed, history, f.events]), /synthetic-secret-never-public/);
   assert.doesNotMatch(await fs.readFile(f.store.historyFile, "utf8"), /synthetic-secret-never-public/);
   assert.match(failed.error, /redacted/);
+  assert.equal(f.calls.filter(call => call.method === "vault.read").length, 1);
+  assert.equal(f.controls.clientOptions, undefined);
+});
+
+test("new subscription requests never fall back to an API key when the CLI is unavailable", async t => {
+  const f = await setup(t); await f.prepare(); f.controls.approval = 0;
+  f.controls.submit = async () => { throw Object.assign(new Error("CLI missing"), { code: "CLI_NOT_FOUND", started: false }); };
+  const result = await f.invoke("imageVideoGenerate", { shotIds: ["scene-1"] });
+  assert.equal(result.code, "CLI_NOT_FOUND");
+  assert.equal(f.calls.filter(call => call.method === "vault.read").length, 0);
+  assert.equal((await f.state()).imageVideo.shots[0].job.transport, "grok-cli");
+});
+
+test("local CLI results outside the job directory are rejected and never copied", async t => {
+  const f = await setup(t); await f.prepare(); f.controls.approval = 0;
+  await f.invoke("imageVideoGenerate", { shotIds: ["scene-1"] });
+  await fs.mkdir(f.controls.clientOptions.workDir, { recursive: true });
+  const external = path.join(f.userData, "private-file.mp4"); await fs.writeFile(external, "private fixture");
+  f.controls.poll = async () => ({ status: "succeeded", videoPath: external });
+  const result = await f.invoke("imageVideoRefresh");
+  assert.equal(result.ok, false);
+  assert.match(result.error, /パス|경로/);
+  assert.equal((await f.state()).imageVideo.shots[0].status, "pending");
+});
+
+test("an interrupted Grok request recovers its durable local receipt after restart without submitting again", async t => {
+  const f = await setup(t); await f.prepare(); f.controls.approval = 0;
+  let submissions = 0;
+  f.controls.submit = async () => { submissions++; throw Object.assign(new Error("Interrupted"), { code: "SUBMISSION_UNCONFIRMED" }); };
+  await f.invoke("imageVideoGenerate", { shotIds: ["scene-1"] });
+  const pending = (await f.state()).imageVideo.shots[0];
+  assert.equal(pending.job.jobId, pending.job.localId);
+  assert.equal(pending.status, "uncertain");
+  const output = path.join(f.controls.clientOptions.workDir, "result.mp4");
+  await fs.mkdir(path.dirname(output), { recursive: true });
+  await fs.writeFile(output, "synthetic CLI output");
+  f.controls.poll = async () => ({ status: "succeeded", videoPath: output });
+  await f.restart();
+  const recovered = await f.invoke("imageVideoRefresh");
+  assert.equal(recovered.ok, true, recovered.error);
+  assert.equal(recovered.entry.imageVideo.shots[0].status, "succeeded");
+  assert.equal(submissions, 1);
+  assert.equal(f.calls.filter(call => call.method === "vault.read").length, 0);
 });
 
 test("download destination validation rejects private IPv4 and non-global IPv6", () => {

@@ -140,7 +140,7 @@
         </div>
       </div>
 
-      <p class="image-creation-note" id="imageCreationNote" hidden>먼저 명세와 보드를 만든 뒤 장면을 선택합니다. Grok·Kling 영상 생성은 별도 버튼에서 시작하며, 외부 서비스 이용료가 발생합니다. 직접 만든 클립도 가져올 수 있습니다.</p>
+      <p class="image-creation-note" id="imageCreationNote" hidden>먼저 명세와 보드를 만든 뒤 장면을 선택합니다. 영상 생성은 별도 버튼에서 시작하며, Grok 구독 사용량 또는 Kling 회원 크레딧을 사용합니다. 직접 만든 클립도 가져올 수 있습니다.</p>
 
       <div class="form-actions">
         <button id="runBtn" class="btn primary" type="button">명세 + 보드 생성</button>
@@ -257,14 +257,15 @@
             <label class="field scene-resolution-field"><span>해상도</span><select id="imageVideoResolution" data-image-control></select></label>
             <div class="scene-provider-actions">
               <span id="imageProviderStatus" class="muted" role="status"></span>
-              <button class="btn" id="configureImageProviderBtn" type="button" data-image-control>영상 API 연결</button>
-              <button class="btn ghost" id="disconnectImageProviderBtn" type="button" data-image-control hidden>연결 해제</button>
-              <button class="btn ghost" id="imageProviderPricingBtn" type="button" data-image-control hidden>요금 확인</button>
-              <button class="btn ghost" id="imageProviderSetupBtn" type="button" data-image-control hidden>API 발급 안내</button>
+              <button class="btn" id="configureImageProviderBtn" type="button" data-image-control>구독 연결 / 확인</button>
+              <button class="btn ghost" id="refreshImageProviderBtn" type="button" data-image-control>상태 새로고침</button>
+              <button class="btn ghost" id="disconnectImageProviderBtn" type="button" data-image-control hidden>앱에서 연결 해제</button>
+              <button class="btn ghost" id="imageProviderPricingBtn" type="button" data-image-control hidden>구독 · 크레딧 안내</button>
+              <button class="btn ghost" id="imageProviderSetupBtn" type="button" data-image-control hidden>CLI 설치 · 로그인 안내</button>
             </div>
           </div>
           <p class="field-hint" id="imageProviderHint"></p>
-          <p class="scene-billing-note">생성을 시작하면 선택한 장면 이미지와 연출 지시문을 외부 서비스에 전송합니다. 웹 구독과 별도로 API 사용 요금이 발생하며, 전송 전에 확인할 수 있습니다.</p>
+          <p class="scene-billing-note">영상 생성에는 Grok 구독 사용량 또는 Kling 회원 크레딧이 필요합니다. 선택한 장면 이미지와 연출 지시문을 해당 서비스에 전송하기 전에 확인합니다. 상태 새로고침은 영상을 생성하지 않습니다.</p>
 
           <div class="scene-workspace">
             <section class="scene-library" aria-label="보드의 16개 셀">
