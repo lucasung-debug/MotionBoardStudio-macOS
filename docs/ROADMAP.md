@@ -1,37 +1,36 @@
-# Original-application port roadmap
+# Original-application roadmap
 
-The target is the creator-provided MotionBoardStudio 0.3.2 production workflow. The earlier independent tile editor remains a prototype; completing its checks does not complete this roadmap.
+The creator-provided MotionBoardStudio 0.3.2 workflow is implemented in the Swift macOS host, WebKit, and local Node runtime. Local production and native UI checks pass. Real-provider acceptance and broader distribution checks remain open.
 
-## 1. Restore the correct baseline
+## Implemented and locally verified
 
-- Preserve the thirty recovered source files and their original relative paths.
-- Preview the original input form and concept/YAML/image/video/history tabs.
-- Keep browser-only preview capabilities distinct from the application's desktop services.
-- Record provenance and the original `window.studio` bridge contract.
+- Preserve the original interface, guides, production contracts, structured direction engine, and experimental generated-code path.
+- Replace Electron integration with 26 runtime bridge operations, Swift native actions, and WebKit DOM capture.
+- Exercise specification and board fixtures through actual music analysis, direction, frame review, audio mixing, FFmpeg output, and history.
+- Verify a 1920×1080, 60 fps, 480-frame H.264/AAC output; production-size captures in all three aspect ratios; free-code output and four-subframe rendering.
+- Verify cancellation preserves completed output and stops subsequent work in the same UI flow.
+- Verify native forms, history opening, board loading, media byte ranges, 1080p video decoding/playback/seeking, and rejection of iframe bridge calls.
+- Verify app-specific authentication behavior with mocks and actual Keychain CRUD using a unique synthetic test service, followed by cleanup.
+- Package official Node.js 24.21.0 arm64, retain its provenance/license, and verify the local bundle's ad-hoc signature.
 
-## 2. Connect the Swift desktop shell
+The public Mixkit catalog and a bounded MP3 download passed a separate live check. Provider account states and AI responses in the production/UI checks remained fixtures. The earlier tile editor and its tests are separate prototype evidence.
 
-- Present the original interface in WebKit with typed, allowlisted Swift messages.
-- Port the original production-entry schema and history storage to Application Support.
-- Implement native open/save panels, imported images/music, Finder reveal, and cancellable tasks.
-- Keep image/video access scoped to the application asset directories.
-- Verify reloading, persistence, keyboard use, and native dialogs with the real UI.
+## Live acceptance remains open
 
-## 3. Restore original generation and rendering
+- Complete fresh ChatGPT and Claude login, renewal, streaming, generation, error handling, and account-state checks with real accounts.
+- Compare external Google Fonts loading, Korean glyph metrics, and representative generated compositions.
+- Extend the bounded music-catalog sample to the normal automatic-selection workflow.
 
-- Preserve the original prompt documents and result normalization.
-- Implement and verify provider login, renewal, streaming, and error handling.
-- Preserve the structured direction engine and the experimental generated-code contract.
-- Compare original-engine frame capture in all three aspect ratios, including Korean text and fonts.
-- Restore music selection/import, beat analysis, sound effects, mixing, and MP4 output.
-- Verify cancellation and failed regeneration preserve the previous completed result.
+## Distribution remains open
 
-## 4. Improve the existing workflow
+- Verify installation and launch on clean supported macOS systems and Intel hardware.
+- Complete Developer ID signing and notarization for distribution.
 
-- Add a seekable scene preview before final export.
-- Make references, start/end states, and loop behavior explicit in the generation contract.
-- Support revising a single scene without regenerating the entire production.
-- Add export presets, reproducible render receipts, and clearer job progress.
-- Complete native UI acceptance, packaging, signing, and distribution verification.
+## Later workflow improvements
 
-The source-backed mapping and verification boundaries are in [ORIGINAL-PORT.md](ORIGINAL-PORT.md). These are planned port steps, not claims that the original application's services already run in Swift.
+- Add a seekable scene preview before full MP4 rendering.
+- Make start, transition, and end states explicit in scene review.
+- Revise a single scene while preserving approved scenes and assets.
+- Add export presets, clearer job progress, and reproducible render receipts.
+
+[ORIGINAL-PORT.md](ORIGINAL-PORT.md) maps current services to the original source. [ORIGINAL-VALIDATION.md](ORIGINAL-VALIDATION.md) records local results and the limits of each check.

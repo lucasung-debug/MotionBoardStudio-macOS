@@ -1,54 +1,54 @@
-# Porting the original MotionBoardStudio 0.3.2
+# Original application port: implementation and verification
 
-The macOS project preserves and ports the supplied MotionBoardStudio application. The source in [upstream/MotionBoardStudio-0.3.2](../upstream/MotionBoardStudio-0.3.2) is the implementation reference. This is a source-based port; no original GitHub repository was supplied to establish a GitHub network fork.
+The source in [upstream/MotionBoardStudio-0.3.2](../upstream/MotionBoardStudio-0.3.2) remains the implementation reference. The macOS port preserves the original workflow and replaces Electron's desktop integration with a Swift host and a local Node.js process. No original GitHub repository URL was supplied; this is a source-based port.
 
-The earlier Swift tile editor is retained as a historical prototype. Its sixteen effects, JSON format, tests, and exports do not establish compatibility with the original application's workflow, documents, or motion engine.
+Implementation of the preserved workflow is complete, and the packaged app has passed the local fixture-based production and native UI checks documented below. Real-provider acceptance remains pending. The earlier sixteen-tile Swift editor is retained as `MotionBoardPrototype`; its results do not establish original-app parity.
 
-## Original workflow
+## Preserved production flow
 
-The shipped source implements the following generation workflow, visible through concept, YAML, board image, video, and history tabs:
+Topic and creative direction feed a ChatGPT or Claude production specification. The user can inspect the concept and YAML, optionally generate or import a 4×4 board, and select automatic music, local music, or sound effects without music. The production pipeline builds a beat grid, generates structured direction or experimental motion code, validates and optionally reviews frames, mixes audio, and renders an MP4. History retains the production entry and its associated image, composition, poster, video, and metadata.
 
-1. Enter a topic, mood, style, copy, exclusions, aspect ratio, desired duration, and optional additional requests.
-2. Select ChatGPT or Claude for the production specification. The result contains a title, concept, YAML specification, image prompt, and notes; output modes also cover image-only and specification-only requests.
-3. Optionally generate a 4×4 board through the ChatGPT image path, or import an external board image. Video generation can proceed from the specification without a board.
-4. Select music from the automatic catalog path, a local file, or no music. Audio analysis and the beat grid determine the loop timing; the no-music path can still include synthesized effects.
-5. Generate direction for the built-in design engine, or use the experimental generated HTML/CSS/JavaScript path. The pipeline validates its composition, attempts repairs, and can review sampled frames before rendering.
-6. Render an MP4 with mixed audio, retain the composition and poster, and attach the outputs to the history entry. The UI supports reopening results, saving assets, and revealing their files.
+Both the structured engine and generated HTML/CSS/JavaScript path remain part of the implementation. Their browser content runs in WebKit; the original audio and FFmpeg pipeline remains JavaScript executed by the local Node worker.
 
-These are source observations, not successful macOS provider or rendering results. The original interface is a generation and result-management application, rather than the timeline editor introduced by the earlier prototype.
+## Implemented mapping
 
-## Entry points and proposed Swift services
+The table identifies current code, not a claim that every live provider or visual behavior has passed acceptance. Original paths are relative to the upstream snapshot.
 
-Service names below describe the target architecture. They are not a claim that each service or its original behavior has been implemented.
-
-| Original entry point | Swift/macOS responsibility |
+| Original entry point | Current macOS implementation |
 | --- | --- |
-| `main.cjs:createWindow`, `registerIpc`; `preload.cjs:studio` | `AppCoordinator` and a typed `StudioBridge`; retain the original screens initially while replacing Electron IPC |
-| `main.cjs:runSpec`; `lib/prompt.cjs:buildInstructions`, `normalizeResult`; `prompts/` | `SpecificationService`; preserve guide resources, request fields, result normalization, streaming progress, and cancellation |
-| `main.cjs:runBoard`, `studio:imageImport` | `BoardService` and `AssetStore`; preserve optional generation, external image import, retry, and save behavior |
-| `lib/codex.cjs`, `lib/claude.cjs`, authentication modules | `ProviderClient` and `AccountStore`; verify supported login and streaming, use Keychain, and keep credentials out of documents |
-| `main.cjs:runVideo`; `lib/video/pipeline.cjs:runVideo` | `VideoPipeline`; preserve stages, options, progress, cancellation, and output metadata |
-| `lib/video/script.cjs:normalizeScript`, `buildEngineShell`; `engine.js`, `kit.js` | `DirectionService` and `WebKitMotionRenderer`; retain the scene contract and explicit-time browser rendering |
-| `lib/video/compose.cjs:parseCompose`, `buildShell` | `CodeCompositionService`; preserve the experimental composition contract in a controlled web renderer |
-| `lib/video/audio.cjs`, `dsp.cjs`, `mixkit.cjs` | `AudioService`; compare beat analysis, loop cutting, synthesized effects, mixing, and music metadata |
-| `lib/video/render.cjs:renderVideo`; `ffmpeg.cjs` | `FrameCaptureService` and `VideoEncoder`; replace Chromium capture and Windows setup, then compare encoding and audio muxing |
-| `lib/store.cjs`; image/video save and reveal handlers in `main.cjs` | `HistoryStore` and native file services; preserve entry fields, related assets, newest-first order, and the 60-entry limit |
+| `main.cjs:createWindow`, `registerIpc`; `preload.cjs:studio` | `Sources/MotionBoardOriginal/OriginalStudioApp.swift` and `RuntimeBridge.swift` host the original UI; `Runtime/engine.cjs` implements the 26 original bridge operations |
+| `main.cjs:runSpec`; `lib/prompt.cjs`; `prompts/` | `Runtime/engine.cjs` reuses original guides, normalization, provider clients, streaming progress, and cancellation |
+| `main.cjs:runBoard`, image import/save handlers | Runtime orchestration, `Runtime/store.cjs`, and native dialogs implement optional board generation, import, persistence, and export |
+| Original ChatGPT/Claude authentication modules | `Runtime/auth.cjs` and `StudioVault.swift` implement app-specific OAuth, Keychain persistence, expiry, refresh, cancellation, and public status |
+| `main.cjs:runVideo`; `lib/video/pipeline.cjs:runVideo` | Runtime orchestration invokes the preserved pipeline and records progress, composition, metadata, and completed outputs |
+| `lib/video/script.cjs`, `engine.js`, `kit.js` | Original direction parsing and browser engine run through `OriginalPageRenderer.swift` with explicit-time DOM capture |
+| `lib/video/compose.cjs` | Original free-code parsing and composition run through the same controlled WebKit rendering service |
+| `lib/video/audio.cjs`, `dsp.cjs`, `mixkit.cjs` | Preserved audio analysis, music selection, loop cutting, synthesized effects, and mixing execute in Node |
+| `lib/video/render.cjs`, `ffmpeg.cjs` | `Runtime/render.cjs` replaces Chromium capture with native WebKit frames and retains FFmpeg encoding/muxing; macOS FFmpeg selection replaces Windows setup |
+| `lib/store.cjs`, save/reveal handlers | `Runtime/store.cjs`, `NativeActions.swift`, and `StudioAssetHandler.swift` provide local history, atomic writes, native file actions, and scoped media access |
 
-The existing WebKit and AVFoundation prototype can inform the capture implementation. It does not demonstrate that the original DOM/CSS renderer, fonts, motion blur, audio, or generated compositions render equivalently.
+The store preserves entries instead of silently applying the original 60-entry truncation. Removing a history entry archives it and its assets in the application's local Trash directory. This is an intentional preservation change, not identical deletion behavior.
+
+## Runtime and packaging
+
+`MotionBoardStudio` is the SwiftPM product for the original app. The Swift host starts a local Node worker with a restricted environment; provider tokens are not inherited. Tokens remain in the worker and the app-specific Keychain service, while the interface receives public account status.
+
+Source runs need an installed Node.js executable. The validated local bundle, `dist/MotionBoard Studio 0.3.2-mac.1.app`, includes the official Node.js 24.21.0 arm64 runtime. Archive checksum, system-library dependencies, bundled runtime source hashes, and deep/strict ad-hoc signature verification passed. The build script defaults to `dist/MotionBoard Studio Original 0.3.2.app` unless given another destination. FFmpeg is installed separately or selected through the app.
 
 ## Verification and next steps
 
-Verified on 2026-09-27: the upstream snapshot contains 30 files totaling 360,724 bytes; all files match the retained extraction by SHA-256 comparison. The workflow and entry-point mapping above were checked against that source.
+| Area | Recorded status and limit |
+| --- | --- |
+| Original source | Thirty files, 360,724 bytes; all preserved source files match the retained extraction by SHA-256 |
+| Original-app JavaScript | 43 checks passed: 29 authentication, 12 engine including nested cases, and 2 original bridge checks |
+| Production pipeline | Original direction, frame review, actual music analysis/mixing, history, and H.264/AAC output passed with fixture provider responses; full-size output was 1920×1080, 60 fps, 480 frames, eight seconds |
+| DOM and free-code rendering | Production-size captures passed at 1440×1440, 1920×1080, and 1080×1920 with identical loop endpoints; free code rendered 60 frames with four subframes per frame |
+| Native services | An isolated synthetic Keychain CRUD test passed and cleaned up; selected-image conversion, rejection of unselected outside images, and media byte ranges passed |
+| Native interface | The real WebKit bridge, five tabs, forms, history opening, board loading, video decoding, muted playback, seeking, and subframe access rejection passed; the 1380×900 screenshot was inspected |
+| Public music catalog | A separate live Mixkit check returned three eligible tracks and downloaded 524,288 bytes of MP3, identified as 44,100 Hz stereo; this is a bounded sample, not a complete catalog acceptance |
+| Account and font acceptance | Real ChatGPT/Claude login, renewal, streaming/generation, and external Google Fonts fidelity remain unverified |
+| Distribution | The local arm64 bundle passed signature and runtime checks; Intel, clean-machine installation, Developer ID signing, and notarization remain unverified |
 
-A localhost preview of the original screens is available through `node scripts/preview-original.cjs`. Its three Node tests passed: original HTML is retained apart from explicit preview injections, unsupported actions return honest errors, and the server only serves allowlisted assets. An isolated Chromium check verified all five tabs, provider switching, and topic/mood/provider persistence after reload, with zero page errors and zero outgoing external requests. The original renderer HTML, CSS, and JavaScript still match the retained extraction. The preview notice and actual screen were visually inspected.
+The packaged combined run is recorded in `.local/verification-release-004/native-receipt.json`. Full-size production evidence is in `.local/verification-original-full-002/verification/receipt.json`, and the 1080p UI playback check is in `.local/verification-native-ui-003/native-ui-receipt.json`. These are local evidence paths, not published download links.
 
-This preview does not exercise real login, generation, filesystem integration, or stored production history. The original application's complete macOS workflow, provider compatibility, audio output, and rendering parity remain unverified.
-
-The new preview resources passed the visual-pattern scanner (two files, zero findings). This check does not claim to audit or redesign the preserved original interface.
-
-1. Verify the original screens, form state, tabs, progress, cancellation, and history navigation with local fixtures.
-2. Port specification normalization and history/asset contracts with synthetic fixtures, preserving original field meanings.
-3. Run a fixed local direction document and local audio through the original engine in WebKit. Compare Korean text, three aspect ratios, representative transitions, exact frame times, loop boundaries, and audio alignment.
-4. Validate the free-code composition path separately, then add provider integration through supported authentication and test each provider explicitly.
-
-Keep verification receipts scoped to the original port or the historical prototype. See [SOURCE-PROVENANCE.md](SOURCE-PROVENANCE.md) for attribution and the supplied source's origin.
+Next, complete fresh real-account login and generation acceptance, external-font comparison, and distribution checks. Fixture credentials and provider responses cannot certify those behaviors. [ORIGINAL-VALIDATION.md](ORIGINAL-VALIDATION.md) lists the commands, measurements, and separation from prototype tests; [SOURCE-PROVENANCE.md](SOURCE-PROVENANCE.md) records attribution.

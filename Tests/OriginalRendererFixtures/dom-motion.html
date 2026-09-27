@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:">
+  <title>Original renderer DOM fixture</title>
+  <style>
+    html,body{margin:0;width:640px;height:360px;overflow:hidden;background:#f4f1e8;color:#182c3a;font:24px system-ui}
+    #stage{position:relative;width:640px;height:360px;overflow:hidden}
+    h1{position:absolute;left:32px;top:10px;font-size:30px;font-weight:700}
+    p{position:absolute;left:32px;bottom:18px;font-size:20px}
+    #block{position:absolute;top:115px;left:40px;width:90px;height:90px;background:#e35d35;transform-origin:45px 45px}
+    #rule{position:absolute;left:32px;top:250px;width:576px;height:5px;background:#182c3a}
+  </style>
+</head>
+<body>
+  <main id="stage"><h1>DOM motion · 한글 검증</h1><div id="block"></div><div id="rule"></div><p>Real WebKit page pixels, no Canvas export.</p></main>
+  <script>
+    window.MK = {
+      T: 2,
+      errors: () => [],
+      seek: (seconds) => {
+        const time = ((seconds % 2) + 2) % 2;
+        const position = Math.round((1 - Math.cos(Math.PI * time)) * 200);
+        document.getElementById('block').style.transform = `translateX(${position}px) rotate(${Math.round(time * 180)}deg)`;
+        return true;
+      }
+    };
+    window.MK_READY = Promise.resolve(MK.seek(0));
+  </script>
+</body>
+</html>

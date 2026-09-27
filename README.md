@@ -1,63 +1,78 @@
 # MotionBoard Studio for macOS
 
-A source-based macOS port of the creator-provided **MotionBoardStudio 0.3.2** Windows application. The goal is to preserve its topic-to-video workflow and move the desktop integration to Swift/Xcode.
+A source-based macOS port of the creator-provided **MotionBoardStudio 0.3.2** application. It preserves the original topic-to-video workflow, interface, prompts, and production engine.
 
-The original application takes a topic and creative direction, generates a production specification with ChatGPT or Claude, optionally produces a 4×4 design board, and renders a music-synchronized motion video. It includes concept, YAML, image, video, and history views.
+The Swift macOS host presents the original interface in WebKit. A local Node.js process runs the production logic; native Swift services provide Keychain access, file dialogs, asset delivery, and DOM frame capture. The macOS runtime does not require Electron. This is a Swift host with preserved JavaScript production code, not a complete rewrite of that code in Swift.
 
-**Port status:** the original source and interface are now the baseline. The original interface can be previewed locally. Its login, generation, media, and history services still require the macOS bridge; the preview does not simulate successful generation. This is not yet a complete macOS replacement.
+**Status:** implementation of the preserved production workflow is complete. The packaged app passed local pipeline, native UI, media, and credential-storage checks. Live ChatGPT/Claude login and generation acceptance remains pending; external Google Fonts fidelity is not yet established.
 
-![Original MotionBoardStudio interface running with the browser preview adapter](docs/images/original-studio.png)
+![Native macOS interface showing a local verification production](docs/images/native-studio.png)
 
-## Preview the original interface
+*Native WebKit screenshot, 1380×900. Provider responses and the visible signed-in account states are local test fixtures; this image does not demonstrate real login or AI generation.*
 
-Requires Node.js with its built-in HTTP server APIs. From the checkout root:
+## Production workflow
+
+1. Enter a topic, mood, style, copy, aspect ratio, desired duration, and any exclusions.
+2. Generate a production specification with ChatGPT or Claude and inspect its concept and YAML.
+3. Optionally generate a 4×4 board through ChatGPT, or import an existing board image.
+4. Choose automatic music selection, a local music file, or sound effects without music.
+5. Use the structured direction engine or experimental generated HTML/CSS/JavaScript, with optional frame review and repair.
+6. Render an MP4 with audio, reopen it from history, save the video or image, and reveal the associated composition.
+
+The local implementation connects all 26 original `window.studio` operations, including generation, progress, cancellation, history, import, save, and reveal actions. Draft rendering uses 30 fps; final rendering uses 60 fps and four subframes for motion blur. A local full-size run produced an eight-second 1920×1080 H.264/AAC video at 60 fps. This verifies the tested production path, not every possible generated composition.
+
+Authentication uses fresh app-specific OAuth login and macOS Keychain storage. The app does not import another application's credentials or inherit provider tokens from the environment. Login status is read locally; generation and other provider operations use the network when invoked.
+
+## Run from source
+
+Requirements: macOS 14 or later, a Swift 6 or later toolchain, Apple's developer tools, and Node.js. Audio processing and MP4 output also require a separate macOS FFmpeg installation. The app can locate FFmpeg or let you select an existing executable.
+
+Open `Package.swift` in Xcode and select the `MotionBoardStudio` product, or run from the checkout root:
 
 ```sh
-node scripts/preview-original.cjs
+swift run MotionBoardStudio
 ```
 
-Open the localhost URL printed by the command. The preview uses the supplied renderer HTML, CSS, and JavaScript, with a browser adapter in place of Electron IPC. It supports the original tabs, form controls, model selection, and browser-local form persistence. Login and generation are explicitly unavailable here, and the preview does not contact providers or read account credentials.
+This launches the original production application. Its current interface is in Korean.
 
-The server binds only to `127.0.0.1` and serves an explicit set of preview resources. Stop it with Control-C.
+## Local app bundle
 
-Run `node --test Tests/original-preview.test.cjs` for the preview checks. Three tests passed, and the five tabs, provider switching, and form persistence were checked in an isolated browser without provider requests. See [the scoped verification record](docs/ORIGINAL-PORT.md#verification-and-next-steps).
+```sh
+scripts/build-app.sh
+```
 
-## Source and porting boundaries
+The default output is `dist/MotionBoard Studio Original 0.3.2.app`; pass a different destination as the first argument to preserve an existing bundle. The validated local bundle is `dist/MotionBoard Studio 0.3.2-mac.1.app`. It includes the official Node.js 24.21.0 arm64 runtime and passed ad-hoc signature verification. FFmpeg remains a separate installation or user-selected executable. Intel, clean-machine installation, Developer ID signing, and notarization have not been verified.
+
+## Verification
+
+```sh
+node --test Tests/original-auth.test.cjs Tests/original-engine.test.cjs Tests/original-bridge.test.cjs Tests/original-preview.test.cjs
+scripts/verify-render.sh .local/original-validation-new
+```
+
+Use a new output directory for native verification. The script verifies the original production app and requires FFmpeg plus a usable macOS graphical session. For production dimensions, run `swift run MotionBoardStudio --verify-original --full-size --output .local/original-full-validation-new`. Provider responses are local fixtures. A separate Keychain test creates and removes its own synthetic item; no real account credential is used.
+
+Recorded results include 43 original-app authentication/engine/bridge checks, native production rendering with audio, three production-size DOM captures, free-code rendering, cancellation preservation, and native UI playback/seeking. A separate public Mixkit check returned three eligible tracks and downloaded a bounded MP3 sample. See [ORIGINAL-VALIDATION.md](docs/ORIGINAL-VALIDATION.md) for exact values, commands, and remaining limits.
+
+## Project layout
 
 | Location | Purpose |
 | --- | --- |
-| `upstream/MotionBoardStudio-0.3.2/` | Preserved application source from the supplied Windows distribution |
-| `preview/` and `scripts/preview-original.cjs` | Original-interface browser adapter and local preview server |
-| `Sources/` | Earlier Swift/Canvas prototype; useful implementation material, not original-app parity |
-| `docs/ORIGINAL-PORT.md` | Original workflow, service mapping, and remaining port work |
-| `docs/SOURCE-PROVENANCE.md` | Source origin, attribution, and publication context |
+| `upstream/MotionBoardStudio-0.3.2/` | Preserved original interface, guides, provider clients, and production engine |
+| `Sources/MotionBoardOriginal/` | Swift application, WebKit bridge, native actions, Keychain, and frame capture |
+| `Runtime/` | Local Node worker, original-workflow orchestration, authentication, storage, and render adapter |
+| `preview/` | Browser-only adapter for inspecting the original interface without desktop services |
+| `Sources/MotionBoardStudio/` | Earlier independent tile-editor prototype |
+| `docs/` | Port status, provenance, roadmap, and scoped validation records |
 
-The initial Swift prototype implemented a separate sixteen-tile motion editor. That was a scope mismatch: the original application is an AI production workflow, not a tile editor. The prototype is retained, but its screenshots, examples, tests, and app bundle do not establish original-application compatibility. The earlier validation record is explicitly scoped in [VALIDATION.md](docs/VALIDATION.md).
+The earlier tile editor remains available as `swift run MotionBoardPrototype`. Its `swift test` and `Tests/board-runtime.test.cjs` checks concern the prototype and shared prototype models, not original-application parity. Its older [validation record](docs/VALIDATION.md) and [JSON format](docs/PROJECT-FORMAT.md) retain that scope.
 
-## Swift/Xcode direction
-
-Keep the original workflow, prompts, result contracts, and motion engine. Replace Electron desktop integration with Swift services for application storage, file dialogs, media access, account state, cancellation, and rendering. WebKit can preserve the HTML/CSS/JavaScript interface and generated motion content while those services are migrated.
-
-The [port plan](docs/ORIGINAL-PORT.md) and [roadmap](docs/ROADMAP.md) distinguish existing Windows code, local interface verification, and work still required on macOS. Provider login/streaming, original-engine capture, audio synchronization, and exported video must each be verified before claiming parity.
-
-## Earlier prototype
-
-The retained experimental Swift package requires macOS 14 or later and a Swift 6 toolchain. Open `Package.swift` in Xcode or run `swift run MotionBoardStudio`. **This launches the earlier tile editor, not the original production application.**
-
-Its checks remain available:
-
-```sh
-swift test
-node --test Tests/board-runtime.test.cjs
-scripts/verify-render.sh
-```
-
-Use the full Xcode developer directory if needed: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`. The earlier prototype's local build script is `scripts/build-app.sh`; its output is not a release of the original-app port.
+For UI inspection alone, `node scripts/preview-original.cjs` starts the separate localhost preview. Its login and generation actions remain unavailable by design; use the native product for the implemented services.
 
 ## Reference, contribution, and license
 
-Charlie Hills's [motion graphics article](https://charliehills.substack.com/p/opus-55-motion-graphics) is a design reference. Its downloadable kit was not accessed or copied. Improvements will be evaluated against the original app's workflow; see [INSPIRATION.md](docs/INSPIRATION.md).
+The [roadmap](docs/ROADMAP.md) separates remaining acceptance work from later workflow improvements. Charlie Hills's [motion graphics article](https://charliehills.substack.com/p/opus-55-motion-graphics) remains background design context; see [INSPIRATION.md](docs/INSPIRATION.md).
 
-Use [Issues](https://github.com/lucasung-debug/MotionBoardStudio-macOS/issues) for bugs and proposals. Include reproduction steps and a minimal example without account data.
+Use [Issues](https://github.com/lucasung-debug/MotionBoardStudio-macOS/issues) for reproducible bugs and proposed changes. Include the macOS version, reproduction steps, and a minimal example without account data.
 
-This repository is published under the [MIT License](LICENSE) at the user's direction. The creator-provided source's provenance and attribution are recorded in [SOURCE-PROVENANCE.md](docs/SOURCE-PROVENANCE.md). No original GitHub repository URL was supplied, so this is a source-based port rather than a GitHub-network fork. Linked articles, external music, fonts, and other third-party assets retain their own terms.
+The repository uses the [MIT License](LICENSE), following the creator consent and publication direction supplied by the user. Original-source attribution and origin are recorded in [SOURCE-PROVENANCE.md](docs/SOURCE-PROVENANCE.md). No original GitHub repository URL was supplied, so this is a source-based port rather than a GitHub-network fork. Linked articles, music, fonts, and other third-party assets retain their own terms.

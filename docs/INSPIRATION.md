@@ -1,24 +1,24 @@
-# Design reference and proposed improvements
+# Design reference and future improvements
 
-The implementation baseline is the creator-provided MotionBoardStudio 0.3.2 application. The reference article informs improvements to that workflow; it does not replace the original app with an unrelated tile editor.
+The implementation baseline is the creator-provided MotionBoardStudio 0.3.2 application. Its production workflow is implemented locally through a Swift macOS host, WebKit, and a Node sidecar. The reference article informs later improvements; it does not replace the original workflow or define its source license.
 
 ## Public reference
 
 Charlie Hills's [public motion graphics article](https://charliehills.substack.com/p/opus-55-motion-graphics) presents sixteen effects sharing an eight-second loop and a workflow using explicit states, references, and iteration. It describes an editable HTML result. The supporting guide and prompts require a free subscription; that material was not accessed for this project.
 
-## Improvements to evaluate in the original app
+## Improvements to evaluate
 
-| Observation | Proposed application improvement | Status |
+| Reference idea | Proposed improvement | Status |
 | --- | --- | --- |
-| Motion examples share a clear loop | Expose a shared seekable preview before committing to a full MP4 render | Planned |
-| Explicit states help specify motion | Add start, transition, and end-state fields to scene review | Planned |
-| Iteration is part of production | Revise one scene while retaining approved scenes and assets | Planned |
-| Editable HTML can remain useful after generation | Provide a clearly labeled composition preview/export alongside video | Planned |
+| A shared loop | Expose a seekable scene preview before a full MP4 render | Planned |
+| Explicit motion states | Add start, transition, and end-state fields to scene review | Planned |
+| Iteration | Revise one scene while retaining approved scenes and assets | Planned |
+| Editable HTML | Make the existing composition easier to preview and export alongside video | Planned |
 
-These are our design proposals, not assertions about the article's internal implementation. The original application already includes structured direction, generated motion code, review, and video rendering; the port should preserve those capabilities before expanding them.
+These are project proposals, not claims about the article's source code. The current port already connects the original structured direction, motion code, frame review, and audio/video pipeline. Integration verification is ongoing; live providers and external-font fidelity remain unverified. The [roadmap](ROADMAP.md) separates that acceptance work from new features.
 
-## Source boundaries
+## Attribution
 
-The user clarified that the creator openly supplied the original application. Its recovered sources are now retained under `upstream/MotionBoardStudio-0.3.2/` as the porting baseline. [SOURCE-PROVENANCE.md](SOURCE-PROVENANCE.md) records this context and attribution.
+The original application's source is preserved in `upstream/MotionBoardStudio-0.3.2/`, with its original authors credited in [SOURCE-PROVENANCE.md](SOURCE-PROVENANCE.md). MIT publication follows the creator consent and direction supplied by the user. No original GitHub URL was supplied, and the source snapshot contains no standalone upstream license file.
 
-The linked article and its downloadable kit are separate materials. Neither the gated prompts nor the kit has been copied. External fonts, music, and other assets retain their own terms.
+The article and its downloadable kit are separate materials. Neither its gated prompts nor its kit has been copied. External fonts, music, imported images, and other assets retain their own terms.

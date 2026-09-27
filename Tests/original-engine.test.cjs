@@ -1,0 +1,274 @@
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
+const path = require("node:path");
+const os = require("node:os");
+const { createEngine } = require("../Runtime/engine.cjs");
+const { createStore } = require("../Runtime/store.cjs");
+const { createRenderer } = require("../Runtime/render.cjs");
+const sourceRoot = path.resolve(__dirname, "../upstream/MotionBoardStudio-0.3.2");
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lNcAAAAASUVORK5CYII=", "base64");
+const SPEC = { title: "Offline fixture", concept: "A local test response", yaml: "project:\n  title: Offline fixture", image_prompt: "A fixture board", notes: [] };
+const response = () => ({ content: JSON.stringify(SPEC), model: "offline-test", reasoningEffort: "fixture" });
+function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
+
+async function setup(t, custom = {}) {
+  const userData = await fs.mkdtemp(path.join(os.tmpdir(), "mbs-engine-test-"));
+  const events = [], nativeCalls = [];
+  const controls = {
+    chat: async () => response(),
+    image: async () => ({ buffer: PNG, model: "offline-image" }),
+    video: async ({ workDir, llm, signal }) => {
+      assert.equal(signal.aborted, false);
+      const reply = await llm({ instructions: "Fixture direction", userText: "Fixture timeline", images: [] });
+      assert.equal(reply.model, "offline-test");
+      await fs.mkdir(workDir, { recursive: true });
+      const videoPath = path.join(workDir, "video.mp4"), posterPath = path.join(workDir, "poster.png"), compositionPath = path.join(workDir, "composition.html");
+      await fs.writeFile(videoPath, "fixture-video-not-a-real-mp4");
+      await fs.writeFile(posterPath, PNG); await fs.writeFile(compositionPath, "<!doctype html><title>fixture</title>");
+      return { videoPath, posterPath, compositionPath, model: "offline-test", meta: { T: 8, frames: 240, fps: 30 } };
+    },
+    native: async method => { throw new Error("Unexpected native request: " + method); }
+  };
+  const authServices = {
+    chatgpt: { status: async () => ({ loggedIn: true, source: "test" }), getAuth: async () => ({ accessToken: "offline-fixture-only", accountId: "fixture" }), cancelLogin: async () => {} },
+    claude: { status: async () => ({ loggedIn: true, source: "test" }), getAuth: async () => ({ token: "offline-fixture-only" }), cancelLogin: async () => {} }
+  };
+  const engine = await createEngine({ sourceRoot, userData, authServices,
+    nativeCall: async (method, params) => { nativeCalls.push({ method, params }); return controls.native(method, params); },
+    emit: (event, payload) => events.push({ event, payload }),
+    testProviders: { codex: { chat: args => controls.chat(args), generateImage: args => controls.image(args) },
+      claude: { chat: args => controls.chat(args) }, pipeline: { runVideo: args => controls.video(args) },
+      ffmpeg: { locate: () => ({ ffmpeg: "/offline/ffmpeg", version: "test" }) },
+      renderer: { shutdown: async () => {} }, fetchImpl: async () => { throw new Error("Network access is forbidden in engine fixtures."); }, ...custom }
+  });
+  t.after(async () => { await engine.shutdown(); await fs.rm(userData, { recursive: true, force: true }); });
+  return { engine, controls, events, nativeCalls, userData, store: createStore(userData) };
+}
+
+async function createEntry(engine) {
+  const result = await engine.invoke("studio:spec", { topic: "Local fixture", provider: "chatgpt", mode: "full", aspectRatio: "16:9", durationSeconds: 8 });
+  assert.equal(result.ok, true, result.error);
+  return result.entry;
+}
+
+test("all original IPC methods and spec → board → video → history work through injected providers", async t => {
+  const { engine, events, store } = await setup(t);
+  const main = await fs.readFile(path.join(sourceRoot, "main.cjs"), "utf8");
+  const originalMethods = Array.from(main.matchAll(/ipcMain\.handle\('([^']+)'/g), match => match[1]);
+  assert.equal(originalMethods.length, 26);
+  assert.deepEqual([...engine.methods].sort(), originalMethods.sort());
+  const entry = await createEntry(engine);
+  const image = await engine.invoke("studio:board", { id: entry.id });
+  assert.equal(image.ok, true, image.error); assert.equal(image.entry.hasImage, true);
+  assert.match(image.entry.imageUrl, /^studio-image:\/\/local\//);
+  const firstImagePath = (await store.readHistory())[0].imagePath;
+  const regenerated = await engine.invoke("studio:board", { id: entry.id });
+  assert.equal(regenerated.ok, true, regenerated.error);
+  assert.notEqual(regenerated.entry.imageUrl, image.entry.imageUrl);
+  assert.deepEqual(await fs.readFile(firstImagePath), PNG);
+  const video = await engine.invoke("studio:video", { id: entry.id, options: { musicSource: "none", review: false } });
+  assert.equal(video.ok, true, video.error); assert.equal(video.entry.hasVideo, true);
+  const history = await engine.invoke("studio:history");
+  assert.equal(history.entries.length, 1); assert.equal(history.entries[0].id, entry.id);
+  const raw = (await store.readHistory())[0];
+  assert.deepEqual(await fs.readFile(raw.imagePath), PNG);
+  assert.equal(engine.resolveMedia(video.entry.videoUrl), await fs.realpath(raw.videoPath));
+  assert.equal(engine.resolveMedia("studio-video://local/%2e%2e/history.json"), null);
+  assert.ok(events.some(event => event.event === "studio:progress" && event.payload.phase === "spec_done"));
+  assert.ok(events.some(event => event.payload.phase === "image_done"));
+  assert.ok(events.some(event => event.payload.phase === "video_done"));
+  assert.equal((await engine.invoke("unknown:method")).code, "UNKNOWN_METHOD");
+});
+
+test("failed image and video regeneration retain prior assets and expose the failure", async t => {
+  const { engine, controls, store } = await setup(t);
+  const entry = await createEntry(engine);
+  assert.equal((await engine.invoke("studio:board", { id: entry.id })).ok, true);
+  assert.equal((await engine.invoke("studio:video", { id: entry.id })).ok, true);
+  const before = (await store.readHistory())[0];
+  controls.image = async () => { throw new Error("Fixture image failure"); };
+  controls.video = async () => { throw new Error("Fixture video failure"); };
+  assert.equal((await engine.invoke("studio:board", { id: entry.id })).ok, false);
+  assert.equal((await engine.invoke("studio:video", { id: entry.id })).ok, false);
+  const after = (await store.readHistory())[0];
+  assert.equal(after.imagePath, before.imagePath); assert.equal(after.videoPath, before.videoPath);
+  assert.equal(after.posterPath, before.posterPath); assert.equal(after.compositionPath, before.compositionPath);
+  assert.deepEqual(await fs.readFile(before.imagePath), PNG);
+  assert.equal(await fs.readFile(before.videoPath, "utf8"), "fixture-video-not-a-real-mp4");
+  assert.match(after.imageError, /Fixture image failure/); assert.match(after.videoError, /Fixture video failure/);
+  controls.video = async () => { throw Object.assign(new Error("Use PowerShell: winget install ffmpeg.exe"), { code: "FFMPEG_MISSING" }); };
+  const missingFFmpeg = await engine.invoke("studio:video", { id: entry.id });
+  assert.equal(missingFFmpeg.code, "FFMPEG_MISSING");
+  assert.match(missingFFmpeg.error, /ffmpeg 연결 \/ 설치 안내/);
+  assert.match(missingFFmpeg.error, /brew install ffmpeg/);
+  assert.doesNotMatch(missingFFmpeg.error, /PowerShell|winget|\.exe/);
+});
+
+test("cancellation wins over a provider that returns late and concurrent generation is refused", async t => {
+  const { engine, controls, store } = await setup(t);
+  const entry = await createEntry(engine);
+  await engine.invoke("studio:board", { id: entry.id });
+  const original = (await store.readHistory())[0];
+  const started = deferred(), finish = deferred();
+  controls.image = async ({ signal }) => { started.resolve(signal); await finish.promise; return { buffer: Buffer.from("late response"), model: "offline-image" }; };
+  const pending = engine.invoke("studio:board", { id: entry.id });
+  const signal = await started.promise;
+  assert.equal((await engine.invoke("studio:spec", { topic: "Concurrent" })).ok, false);
+  assert.equal((await engine.invoke("studio:historyRemove", { id: entry.id })).ok, false);
+  assert.equal((await engine.invoke("studio:cancel")).ok, true); assert.equal(signal.aborted, true);
+  finish.resolve(); const result = await pending;
+  assert.equal(result.ok, false); assert.equal(result.code, "CANCELLED");
+  assert.equal((await store.readHistory())[0].imagePath, original.imagePath);
+  assert.deepEqual(await fs.readFile(original.imagePath), PNG);
+});
+
+test("cancelled spec creates no entry and malformed stored history is never overwritten", async t => {
+  const { engine, controls, store } = await setup(t);
+  const started = deferred(), finish = deferred();
+  controls.chat = async () => { started.resolve(); await finish.promise; return response(); };
+  const pending = engine.invoke("studio:spec", { topic: "Cancel fixture" });
+  await started.promise; await engine.invoke("studio:cancel"); finish.resolve();
+  assert.equal((await pending).code, "CANCELLED"); assert.equal((await store.readHistory()).length, 0);
+  await fs.writeFile(store.historyFile, "{malformed history"); controls.chat = async () => response();
+  assert.equal((await engine.invoke("studio:spec", { topic: "Preserve history" })).ok, false);
+  assert.equal(await fs.readFile(store.historyFile, "utf8"), "{malformed history");
+});
+
+test("image import failure preserves the board; history removal keeps all assets in app Trash", async t => {
+  const { engine, controls, store, userData } = await setup(t);
+  const entry = await createEntry(engine);
+  await engine.invoke("studio:board", { id: entry.id }); await engine.invoke("studio:video", { id: entry.id });
+  const original = (await store.readHistory())[0];
+  controls.native = async method => {
+    if (method === "dialog.open") return { canceled: false, filePaths: [path.join(userData, "invalid.png")] };
+    if (method === "image.loadForModel") throw new Error("Invalid test image");
+    throw new Error("Unexpected callback");
+  };
+  assert.equal((await engine.invoke("studio:imageImport", { id: entry.id })).ok, false);
+  assert.equal((await store.readHistory())[0].imagePath, original.imagePath);
+  const removed = await engine.invoke("studio:historyRemove", { id: entry.id });
+  assert.equal(removed.ok, true, removed.error);
+  assert.ok(removed.trashPath.startsWith(store.trashDir + path.sep));
+  assert.equal((await store.readHistory()).length, 0);
+  const archived = JSON.parse(await fs.readFile(path.join(removed.trashPath, "entry.json"), "utf8"));
+  assert.equal(archived.id, entry.id);
+  assert.deepEqual(await fs.readFile(path.join(removed.trashPath, path.basename(original.imagePath))), PNG);
+  assert.equal(await fs.readFile(path.join(removed.trashPath, entry.id, path.basename(path.dirname(original.videoPath)), "video.mp4"), "utf8"), "fixture-video-not-a-real-mp4");
+});
+
+test("atomic history transactions retain concurrent additions and patches", async t => {
+  const { store } = await setup(t);
+  await Promise.all(Array.from({ length: 12 }, (_, index) => store.addEntry({ id: "entry-" + index, title: "Fixture " + index })));
+  assert.equal((await store.readHistory()).length, 12);
+  await Promise.all([store.updateEntry("entry-0", { imagePath: "fixture.png" }), store.updateEntry("entry-0", { videoPath: "fixture.mp4" })]);
+  const entry = (await store.readHistory()).find(item => item.id === "entry-0");
+  assert.equal(entry.imagePath, "fixture.png"); assert.equal(entry.videoPath, "fixture.mp4");
+});
+
+test("provider diagnostics and progress never expose tokens or raw HTTP response bodies", async t => {
+  const { engine, controls, events } = await setup(t);
+  controls.chat = async ({ accessToken, onDelta }) => {
+    onDelta({ kind: "status", text: "Failure diagnostic: " + accessToken + " Bearer synthetic-token-value" });
+    throw new Error("Provider failure: " + accessToken + " eyJhbGciOiJub25lIn0.eyJzdWIiOiJmaXh0dXJlIn0.signature");
+  };
+  const result = await engine.invoke("studio:spec", { topic: "Redaction fixture" });
+  assert.equal(result.ok, false);
+  const publicOutput = JSON.stringify({ result, events });
+  assert.doesNotMatch(publicOutput, /offline-fixture-only|synthetic-token-value|eyJhbGci/);
+  assert.match(publicOutput, /redacted/);
+  controls.chat = async () => { throw new Error('ChatGPT 요청 실패 (500): {"private_response":"fixture-private-payload"}'); };
+  const httpError = await engine.invoke("studio:spec", { topic: "HTTP fixture" });
+  assert.match(httpError.error, /HTTP 500/);
+  assert.doesNotMatch(httpError.error, /fixture-private-payload|private_response/);
+});
+
+test("native rendering awaits pixel analysis, closes pages, and caps final rendering at two workers", async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "mbs-render-test-"));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const calls = [], pipelines = [], commands = []; let nextID = 0, live = 0, maximum = 0;
+  const nativeCall = async (method, params) => {
+    calls.push({ method, params });
+    if (method === "render.open") { live += 1; maximum = Math.max(maximum, live); return { pageId: String(++nextID), ready: true, errors: [] }; }
+    if (method === "render.close") { live -= 1; return {}; }
+    if (method === "render.eval") return { bad: [], slow: 1, errors: [], sfx: [[0, "click", 0.5]] };
+    if (method === "render.capture") return { data: PNG.toString("base64") };
+    if (method === "image.spread") return { spread: 12 };
+    throw new Error("Unexpected native call");
+  };
+  const ffmpeg = {
+    pipe: args => { const item = { args, frames: 0 }; pipelines.push(item); return { write: async () => { item.frames += 1; }, end: async () => {}, kill() {} }; },
+    run: async args => { commands.push(args); await fs.writeFile(args[args.length - 1], "fixture output"); }
+  };
+  const renderer = createRenderer({ sourceRoot, nativeCall, ffmpeg });
+  const timing = { W: 320, H: 180, T: 0.1, fps: 60, beat: 0.5 };
+  const result = await renderer.validate("fixture.html", timing);
+  assert.equal(result.ok, true); assert.deepEqual(result.spreads, [12, 12, 12]); assert.equal(live, 0);
+  const outFile = path.join(directory, "video.mp4"), posterFile = path.join(directory, "poster.png");
+  await fs.writeFile(outFile, "previous movie"); await fs.writeFile(posterFile, "previous poster");
+  const rendered = await renderer.renderVideo("fixture.html", timing, { outFile, posterFile, workers: 8 });
+  assert.deepEqual(rendered, { frames: 6, fps: 60, subframes: 4, workers: 2 });
+  assert.equal(pipelines.reduce((sum, pipeline) => sum + pipeline.frames, 0), 24);
+  assert.ok(pipelines.every(pipeline => pipeline.args.some(arg => String(arg).includes("tmix=frames=4"))));
+  assert.ok(commands[0].includes("libx264")); assert.ok(commands[0].includes("bt709"));
+  assert.ok(maximum <= 2); assert.equal(live, 0);
+  assert.equal(await fs.readFile(outFile, "utf8"), "fixture output");
+  assert.deepEqual(await fs.readFile(posterFile), PNG);
+  assert.deepEqual((await fs.readdir(directory)).sort(), ["poster.png", "video.mp4"]);
+  await renderer.shutdown();
+});
+
+test("cancelling an opening native render releases its late page", async () => {
+  const opened = deferred(), calls = [], controller = new AbortController();
+  const renderer = createRenderer({ sourceRoot, ffmpeg: {}, nativeCall: async (method, params) => {
+    calls.push({ method, params }); if (method === "render.open") return opened.promise; return {};
+  } });
+  const pending = renderer.openPage("fixture.html", { W: 320, H: 180, signal: controller.signal });
+  controller.abort(); await assert.rejects(pending, error => error.code === "CANCELLED");
+  opened.resolve({ pageId: "late", ready: true, errors: [] });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(calls.some(call => call.method === "render.close" && call.params.pageId === "late"));
+});
+
+test("cancellation during final mux preserves the existing movie and poster even if FFmpeg returns late success", async t => {
+  for (const lateSuccess of [false, true]) {
+    await t.test(lateSuccess ? "late FFmpeg success" : "FFmpeg abort rejection", async t => {
+      const directory = await fs.mkdtemp(path.join(os.tmpdir(), "mbs-mux-cancel-test-"));
+      t.after(() => fs.rm(directory, { recursive: true, force: true }));
+      const outFile = path.join(directory, "video.mp4"), posterFile = path.join(directory, "poster.png");
+      await fs.writeFile(outFile, "previous completed movie"); await fs.writeFile(posterFile, "previous poster");
+      const controller = new AbortController(); let opened = 0, closed = 0;
+      const renderer = createRenderer({ sourceRoot,
+        nativeCall: async method => {
+          if (method === "render.open") return { pageId: String(++opened), ready: true, errors: [] };
+          if (method === "render.capture") return { data: PNG.toString("base64") };
+          if (method === "render.close") { closed += 1; return {}; }
+          throw new Error("Unexpected native call: " + method);
+        },
+        ffmpeg: {
+          pipe: () => ({ write: async () => {}, end: async () => {}, kill() {} }),
+          run: async args => {
+            const temporary = args[args.length - 1];
+            assert.notEqual(temporary, outFile);
+            assert.equal(path.dirname(temporary), directory);
+            assert.equal(path.extname(temporary), ".mp4");
+            await fs.writeFile(temporary, "unfinished mux output");
+            assert.equal(await fs.readFile(outFile, "utf8"), "previous completed movie");
+            assert.equal(await fs.readFile(posterFile, "utf8"), "previous poster");
+            controller.abort();
+            if (!lateSuccess) throw Object.assign(new Error("Fixture mux cancellation"), { code: "CANCELLED" });
+          }
+        }
+      });
+      await assert.rejects(renderer.renderVideo("fixture.html", { W: 320, H: 180, T: 0.1, fps: 60 },
+        { outFile, posterFile, quality: "draft", signal: controller.signal }), error => error.code === "CANCELLED");
+      assert.equal(await fs.readFile(outFile, "utf8"), "previous completed movie");
+      assert.equal(await fs.readFile(posterFile, "utf8"), "previous poster");
+      assert.deepEqual((await fs.readdir(directory)).sort(), ["poster.png", "video.mp4"]);
+      assert.equal(opened, closed);
+      await renderer.shutdown();
+    });
+  }
+});

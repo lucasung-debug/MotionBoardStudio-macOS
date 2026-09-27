@@ -6,10 +6,18 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "MotionBoardCore", targets: ["MotionBoardCore"]),
-        .executable(name: "MotionBoardStudio", targets: ["MotionBoardStudio"])
+        .executable(name: "MotionBoardStudio", targets: ["MotionBoardOriginal"]),
+        .executable(name: "MotionBoardPrototype", targets: ["MotionBoardStudio"])
     ],
     targets: [
         .target(name: "MotionBoardCore"),
+        .executableTarget(
+            name: "MotionBoardOriginal",
+            path: ".",
+            exclude: [".git", ".gitignore", ".local", "reference", "dist", "docs", "examples", "preview", "scripts", "Tests", "Sources/MotionBoardCore", "Sources/MotionBoardStudio", "README.md", "LICENSE"],
+            sources: ["Sources/MotionBoardOriginal"],
+            resources: [.copy("upstream/MotionBoardStudio-0.3.2"), .copy("Runtime")]
+        ),
         .executableTarget(
             name: "MotionBoardStudio",
             dependencies: ["MotionBoardCore"],
