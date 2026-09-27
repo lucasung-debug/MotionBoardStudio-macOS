@@ -33,7 +33,7 @@ The store preserves entries instead of silently applying the original 60-entry t
 
 `MotionBoardStudio` is the SwiftPM product for the original app. The Swift host starts a local Node worker with a restricted environment; provider tokens are not inherited. Tokens remain in the worker and the app-specific Keychain service, while the interface receives public account status.
 
-Source runs need an installed Node.js executable. The local bundles include the official Node.js 24.21.0 arm64 runtime. Archive checksum, system-library dependencies, bundled runtime source hashes, and deep/strict ad-hoc signature verification passed. The latest bundle is `dist/MotionBoard Studio 0.3.2-mac.2.app`, which adds the explicit live verification command. The build script defaults to `dist/MotionBoard Studio Original 0.3.2.app` unless given another destination. FFmpeg is installed separately or selected through the app.
+Source runs need installed Node.js and FFmpeg executables. The local bundles include official Node.js 24.21.0 arm64. The earlier `mac.2` bundle added the explicit live verification command. The `mac.3` distribution also bundles a standalone LGPL FFmpeg build, using Apple's VideoToolbox for H.264 encoding, and supplies a drag-to-Applications DMG. The build script defaults to `dist/MotionBoard Studio 0.3.2-mac.3.app` unless given another destination. See [DISTRIBUTION.md](DISTRIBUTION.md) for installer contents and verification.
 
 ## Verification and next steps
 

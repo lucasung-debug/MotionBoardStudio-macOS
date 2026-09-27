@@ -14,8 +14,9 @@ const SPEC = { title: "Offline fixture", concept: "A local test response", yaml:
 const response = () => ({ content: JSON.stringify(SPEC), model: "offline-test", reasoningEffort: "fixture" });
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
 
-async function setup(t, custom = {}) {
+async function setup(t, custom = {}, initialState = null) {
   const userData = await fs.mkdtemp(path.join(os.tmpdir(), "mbs-engine-test-"));
+  if (initialState) await createStore(userData).writeState(initialState);
   const events = [], nativeCalls = [];
   const controls = {
     chat: async () => response(),
@@ -53,6 +54,25 @@ async function createEntry(engine) {
   assert.equal(result.ok, true, result.error);
   return result.entry;
 }
+
+test("packaged FFmpeg takes priority while source runs retain a saved external installation", async t => {
+  const prior = process.env.MOTION_BOARD_FFMPEG;
+  t.after(() => { if (prior === undefined) delete process.env.MOTION_BOARD_FFMPEG; else process.env.MOTION_BOARD_FFMPEG = prior; });
+  const saved = "/previous-installation/ffmpeg", bundled = "/Applications/Fixture.app/Contents/MacOS/ffmpeg";
+  for (const packaged of [true, false]) {
+    await t.test(packaged ? "bundled runtime" : "source runtime", async t => {
+      if (packaged) process.env.MOTION_BOARD_FFMPEG = bundled;
+      else delete process.env.MOTION_BOARD_FFMPEG;
+      const { engine, store } = await setup(t, {
+        ffmpeg: { locate: () => ({ ffmpeg: process.env.MOTION_BOARD_FFMPEG, version: "fixture" }) }
+      }, { ffmpegPath: saved });
+      const result = await engine.invoke("studio:env");
+      assert.equal(result.ok, true);
+      assert.equal(result.ffmpeg.ffmpeg, packaged ? bundled : saved);
+      assert.equal((await store.readState()).ffmpegPath, saved);
+    });
+  }
+});
 
 test("all original IPC methods and spec → board → video → history work through injected providers", async t => {
   const { engine, events, store } = await setup(t);

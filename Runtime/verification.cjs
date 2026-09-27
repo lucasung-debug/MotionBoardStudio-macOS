@@ -125,6 +125,7 @@ async function createVerification({sourceRoot, userData, nativeCall}) {
     if(!cancelled||hashBefore!==hashAfter) throw new Error('Cancellation did not preserve the existing video.');
     await renderer.shutdown();
     const receipt={ok:true,offline:true,fullSize,providerCallsAreFixtures:true,actualProviderLoginTested:false,
+      runtime:{node:process.execPath,ffmpeg:env.ffmpeg.ffmpeg,ffprobe,h264Encoder:process.env.MOTION_BOARD_H264_ENCODER||'libx264'},
       phases,originalWorkflow:true,historyRoundTrip:true,boardAttachment:true,musicAnalysisAndMixing:true,
       video:{width:visual.width,height:visual.height,fps:video.videoMeta.fps,frames:Number(visual.nb_frames),seconds:Number(media.format.duration),audio:sound.codec_name,bpm:video.videoMeta.bpm},
       ratios:ratioChecks,freeCode:{frames:final.frames,fps:final.fps,subframes:final.subframes},cancellationPreservesExistingVideo:true};

@@ -10,6 +10,14 @@ The Swift macOS host presents the original interface in WebKit. A local Node.js 
 
 *Native WebKit screenshot, 1380×900. Provider responses and the visible signed-in account states are local test fixtures; this image does not demonstrate real login or AI generation.*
 
+## Install on a Mac
+
+Download the Apple Silicon DMG from [GitHub Releases](https://github.com/lucasung-debug/MotionBoardStudio-macOS/releases). Open it and drag **MotionBoard Studio.app** to **Applications**, eject the disk, and open the installed app. macOS 14 or later is required. Node.js and FFmpeg are included; Homebrew and developer tools are not required for the packaged application.
+
+The current distribution uses an ad-hoc signature and is **not Apple-notarized**. If macOS blocks its first launch, follow [Apple's instructions](https://support.apple.com/en-us/102445): after verifying the download's source and attempting to open it, allow it in **System Settings → Privacy & Security → Open Anyway**. Developer ID signing, notarization, and Intel distribution remain future work.
+
+Sign in to ChatGPT or Claude inside the app. Automatic board-image generation requires ChatGPT. The installer contains no account credentials or generated user content. Its current video feature creates motion graphics from the specification and board references; it does not animate subjects inside a board through an image-to-video AI model.
+
 ## Production workflow
 
 1. Enter a topic, mood, style, copy, aspect ratio, desired duration, and any exclusions.
@@ -39,9 +47,12 @@ This launches the original production application. Its current interface is in K
 
 ```sh
 scripts/build-app.sh
+scripts/build-dmg.sh
 ```
 
-The default output is `dist/MotionBoard Studio Original 0.3.2.app`; pass a different destination as the first argument to preserve an existing bundle. The latest local bundle is `dist/MotionBoard Studio 0.3.2-mac.2.app`. It includes the official Node.js 24.21.0 arm64 runtime and passed ad-hoc signature verification. FFmpeg remains a separate installation or user-selected executable. Intel, clean-machine installation, Developer ID signing, and notarization have not been verified.
+The default app output is `dist/MotionBoard Studio 0.3.2-mac.3.app`; pass a different destination as the first argument to preserve an existing bundle. The DMG script accepts an app path and a new DMG destination. Both scripts refuse to overwrite existing outputs. The arm64 build includes official Node.js 24.21.0 and a separately compiled FFmpeg executable with system-only dependencies. Its FFmpeg build disables GPL/nonfree components and uses Apple's VideoToolbox for H.264 output. The exact FFmpeg source, license texts, release signature, and build recipe are included inside the app.
+
+See [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the packaging procedure and verification scope. The source checkout still supports an independently installed FFmpeg.
 
 ## Verification
 
@@ -52,7 +63,7 @@ scripts/verify-render.sh .local/original-validation-new
 
 Use a new output directory for native verification. The script verifies the original production app and requires FFmpeg plus a usable macOS graphical session. For production dimensions, run `swift run MotionBoardStudio --verify-original --full-size --output .local/original-full-validation-new`. Provider responses are local fixtures. A separate Keychain test creates and removes its own synthetic item; no real account credential is used.
 
-Recorded results include 43 original-app authentication/engine/bridge checks, native production rendering with audio, three production-size DOM captures, free-code rendering, cancellation preservation, and native UI playback/seeking. The separate live run used real providers and selected music after analyzing five Mixkit candidates. Google Fonts loading was also verified with four actual FontFace entries. See [ORIGINAL-VALIDATION.md](docs/ORIGINAL-VALIDATION.md) for exact values, commands, and remaining limits.
+Recorded results include 46 original-app authentication/engine/bridge checks, native production rendering with audio, three production-size DOM captures, free-code rendering, cancellation preservation, and native UI playback/seeking. The separate live run used real providers and selected music after analyzing five Mixkit candidates. Google Fonts loading was also verified with four actual FontFace entries. See [ORIGINAL-VALIDATION.md](docs/ORIGINAL-VALIDATION.md) for the initial workflow checks and [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the installed DMG's 57-test and native rendering results.
 
 ## Project layout
 

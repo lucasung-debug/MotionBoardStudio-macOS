@@ -12,6 +12,7 @@ The creator-provided MotionBoardStudio 0.3.2 workflow is implemented in the Swif
 - Verify native forms, history opening, board loading, media byte ranges, 1080p video decoding/playback/seeking, and rejection of iframe bridge calls.
 - Verify app-specific authentication behavior with mocks and actual Keychain CRUD using a unique synthetic test service, followed by cleanup.
 - Package official Node.js 24.21.0 arm64, retain its provenance/license, and verify the local bundle's ad-hoc signature.
+- Distribute a drag-to-Applications DMG with standalone LGPL FFmpeg, its corresponding source, and the system VideoToolbox encoder; verify installation and full-size native rendering on the local Mac.
 
 The isolated production/UI checks used fixture account states and AI responses. A separate live run subsequently used fresh app accounts: ChatGPT generated the specification and board, Claude generated and reviewed direction, and five actual Mixkit candidates were analyzed before rendering a 1440×1440, 60 fps, 8.8-second video. Four actual Google FontFace entries also passed loading checks. The earlier tile editor and its tests remain separate prototype evidence.
 
@@ -21,7 +22,7 @@ The isolated production/UI checks used fixture account states and AI responses. 
 - Compare Korean glyph metrics and more generated compositions against Windows output.
 - Broaden coverage of music categories and free-code generations; the live acceptance run used the structured direction engine.
 
-## Distribution remains open
+## Broader distribution remains open
 
 - Verify installation and launch on clean supported macOS systems and Intel hardware.
 - Complete Developer ID signing and notarization for distribution.

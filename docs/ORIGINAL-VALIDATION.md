@@ -23,7 +23,7 @@ The combined receipt is `.local/verification-release-004/native-receipt.json`. F
 
 ## Runtime and source integrity
 
-The combined fixture validation used `dist/MotionBoard Studio 0.3.2-mac.1.app`. The latest bundle is `dist/MotionBoard Studio 0.3.2-mac.2.app`, adding the explicit live-verification entry point. Both use official Node.js **v24.21.0, arm64**. The archive checksum and system-library-only dependencies were checked, all eight bundled runtime files matched current source hashes, and `codesign --verify --deep --strict` passed for the ad-hoc signed bundles. Authentication and engine checks also passed as 41 tests under bundled Node.js.
+The combined fixture validation used `dist/MotionBoard Studio 0.3.2-mac.1.app`. The subsequent `dist/MotionBoard Studio 0.3.2-mac.2.app` added the explicit live-verification entry point. Both use official Node.js **v24.21.0, arm64**. The archive checksum and system-library-only dependencies were checked, all eight bundled runtime files matched current source hashes, and `codesign --verify --deep --strict` passed for the ad-hoc signed bundles. Authentication and engine checks also passed as 41 tests under bundled Node.js. The later self-contained `mac.3` installer is documented separately in [DISTRIBUTION.md](DISTRIBUTION.md).
 
 The final `mac.2` bundle also passed native UI verification with exit 0, including the original forms, history/board loading, 1080p video playback and seeking, and subframe bridge rejection. Its receipt is `.local/verification-release2-ui-006/native-ui-receipt.json`; account states in this UI-only run were fixtures.
 
@@ -40,10 +40,9 @@ node --test Tests/original-auth.test.cjs Tests/original-engine.test.cjs Tests/or
 swift test
 ```
 
-The bundle builder requires an unused destination. With no argument it creates `dist/MotionBoard Studio Original 0.3.2.app`; the named validation bundle can be reproduced with:
+The following commands inspect the preserved `mac.1` validation bundle. For the current app and DMG build procedure, use [DISTRIBUTION.md](DISTRIBUTION.md).
 
 ```sh
-scripts/build-app.sh "dist/MotionBoard Studio 0.3.2-mac.1.app"
 codesign --verify --deep --strict "dist/MotionBoard Studio 0.3.2-mac.1.app"
 "dist/MotionBoard Studio 0.3.2-mac.1.app/Contents/MacOS/node" --version
 ```

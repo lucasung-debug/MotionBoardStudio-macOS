@@ -48,7 +48,11 @@ async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {},
   const store = createStore(userData);
   await store.ensureDirs();
   const savedState = await store.readState();
-  if (savedState.ffmpegPath && typeof savedState.ffmpegPath === "string") process.env.MOTION_BOARD_FFMPEG = savedState.ffmpegPath;
+  // The Mac host's explicit bundled path takes priority over a previously
+  // selected external installation, keeping it paired with its encoder.
+  if (!process.env.MOTION_BOARD_FFMPEG && typeof savedState.ffmpegPath === "string" && savedState.ffmpegPath) {
+    process.env.MOTION_BOARD_FFMPEG = savedState.ffmpegPath;
+  }
   const renderer = testProviders.renderer || createRenderer({ sourceRoot, nativeCall, ffmpeg });
   const services = authServices || await require("./auth.cjs").createAuthServices({ sourceRoot, nativeCall, emit: safeEmit, fetchImpl: testProviders.fetchImpl });
   const auth = services.chatgpt, claudeAuth = services.claude;

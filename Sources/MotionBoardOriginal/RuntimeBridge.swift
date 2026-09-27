@@ -31,7 +31,17 @@ final class RuntimeBridge {
         child.currentDirectoryURL = StudioPaths.runtimeRoot
         let current = ProcessInfo.processInfo.environment
         var environment = current.filter { ["HOME", "TMPDIR", "LANG", "LC_ALL"].contains($0.key) }
+        let bundledTools = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS", isDirectory: true)
+        let bundledFFmpeg = bundledTools.appendingPathComponent("ffmpeg").path
+        let bundledFFprobe = bundledTools.appendingPathComponent("ffprobe").path
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        if FileManager.default.isExecutableFile(atPath: bundledFFmpeg),
+           FileManager.default.isExecutableFile(atPath: bundledFFprobe) {
+            environment["PATH"] = bundledTools.path + ":" + environment["PATH"]!
+            environment["MOTION_BOARD_FFMPEG"] = bundledFFmpeg
+            // The distributable LGPL build uses Apple's H.264 encoder.
+            environment["MOTION_BOARD_H264_ENCODER"] = "h264_videotoolbox"
+        }
         child.environment = environment
         child.standardInput = stdin; child.standardOutput = stdout; child.standardError = stderr
         input = stdin; output = stdout; errors = stderr; process = child

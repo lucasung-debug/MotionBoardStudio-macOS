@@ -62,7 +62,9 @@ async function commitOutputs(outputs, signal) {
   }
 }
 
-function createRenderer({ sourceRoot, nativeCall, ffmpeg: injectedFFmpeg }) {
+function createRenderer({ sourceRoot, nativeCall, ffmpeg: injectedFFmpeg,
+  h264Encoder = process.env.MOTION_BOARD_H264_ENCODER || "libx264" }) {
+  if (!["libx264", "h264_videotoolbox"].includes(h264Encoder)) throw new Error("지원하지 않는 H.264 인코더입니다.");
   const ffmpeg = injectedFFmpeg || require(path.join(sourceRoot, "lib/video/ffmpeg.cjs"));
   const pages = new Set();
   async function call(method, params, signal, timeout = 60000) {
@@ -242,8 +244,12 @@ function createRenderer({ sourceRoot, nativeCall, ffmpeg: injectedFFmpeg }) {
       const list = path.join(directory, "segments.txt");
       await fsp.writeFile(list, results.map(result => `file '${result.value.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`).join("\n"));
       const audioArgs = audioFile ? ["-i", audioFile, "-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "256k", "-shortest"] : ["-map", "0:v"];
+      const videoArgs = h264Encoder === "h264_videotoolbox"
+        ? ["-c:v", h264Encoder, "-allow_sw", "1", "-b:v", String(Math.max(2_000_000,
+          Math.round(timing.W * timing.H * fps * (quality === "draft" ? 0.08 : 0.18)))), "-profile:v", "high"]
+        : ["-c:v", "libx264", "-preset", "medium", "-crf", "16", "-profile:v", "high"];
       await ffmpeg.run(["-y", "-f", "concat", "-safe", "0", "-i", list, ...audioArgs,
-        "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-profile:v", "high",
+        ...videoArgs,
         "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p", "-colorspace", "bt709",
         "-color_primaries", "bt709", "-color_trc", "bt709", "-r", String(fps), "-movflags", "+faststart", stagedVideo], { signal });
       await commitOutputs([

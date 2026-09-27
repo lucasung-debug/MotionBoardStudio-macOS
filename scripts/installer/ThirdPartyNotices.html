@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MotionBoard Studio — Third-party notices</title>
+<style>
+  :root { color-scheme: light dark; font: 16px/1.65 -apple-system, BlinkMacSystemFont, sans-serif; }
+  body { max-width: 760px; margin: 56px auto; padding: 0 28px 40px; }
+  h1 { font-size: 28px; } h2 { font-size: 21px; margin-top: 32px; }
+  code { font-size: .86em; overflow-wrap: anywhere; }
+  a { color: #8464e8; }
+</style>
+<h1>Third-party notices</h1>
+<h2>MotionBoard Studio</h2>
+<p>The application is distributed under the MIT License. Its source and creator attribution are available in the <a href="https://github.com/lucasung-debug/MotionBoardStudio-macOS">project repository</a>.</p>
+<h2>Node.js</h2>
+<p>This app includes the official Node.js runtime. Its license and third-party notices are retained in <code>Contents/Resources/Node-LICENSE.txt</code>. The archive version, source URL, and checksum are recorded in <code>Node-provenance.json</code> beside that file.</p>
+<h2>FFmpeg</h2>
+<p>This software uses an unmodified, separately executed build of <a href="https://ffmpeg.org/">FFmpeg</a> licensed under the GNU Lesser General Public License, version 2.1 or later. GPL and nonfree components are disabled. H.264 encoding uses Apple's system VideoToolbox framework.</p>
+<p>The exact FFmpeg source archive, release signature, license texts, build recipe, configuration, and provenance are included inside the application at <code>Contents/Resources/ThirdParty/FFmpeg/</code>. In Finder, select the app, choose “Show Package Contents,” and open that directory. The MIT license for this application does not replace FFmpeg's license.</p>
+<p>FFmpeg is a separate executable, not linked into the Swift or Node application. You may rebuild and replace <code>Contents/MacOS/ffmpeg</code> and <code>Contents/MacOS/ffprobe</code>. Modifying an app bundle changes its signature; locally re-sign the modified bundle before running it. Nothing in this application's license prohibits modification or reverse engineering permitted by the LGPL.</p>
+<h2>Fonts, music, and generated content</h2>
+<p>Music and web fonts are obtained only when their corresponding application features are used. They are not included in this installer and retain their own licenses. Music attribution is stored with the generated result.</p>
+</html>
