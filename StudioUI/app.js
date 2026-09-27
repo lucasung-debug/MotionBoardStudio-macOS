@@ -350,8 +350,8 @@ function renderImage(entry) {
     view.hidden = true;
     empty.hidden = false;
     empty.textContent = entry.imageError
-      ? `이미지 생성 실패: ${entry.imageError}  — "이미지만 다시 생성"으로 재시도할 수 있습니다.`
-      : '보드 이미지가 아직 없습니다. 아래 "외부 이미지 가져오기"로 다른 도구(GPT 웹 등)에서 만든 이미지를 붙이거나, ChatGPT 로그인 후 "이미지만 다시 생성"을 사용하세요.';
+      ? `이미지 생성 실패: ${entry.imageError}  — 아래 "보드 이미지 생성"으로 재시도할 수 있습니다.`
+      : '보드 이미지가 아직 없습니다. 아래 "보드 이미지 생성"으로 현재 명세의 보드를 만들거나, "외부 이미지 가져오기"로 직접 만든 보드를 붙일 수 있습니다.';
   }
 }
 
@@ -644,6 +644,8 @@ function renderImageVideo(entry) {
 function refreshImageControls() {
   for (const control of document.querySelectorAll('[data-image-control]')) control.disabled = busy;
   for (const button of document.querySelectorAll('.history-actions .btn')) button.disabled = busy;
+  $('regenImageBtn').disabled = busy || !current?.imagePrompt;
+  $('regenImageBtn').textContent = current?.imageUrl ? '이미지만 다시 생성' : '보드 이미지 생성';
   const supported = Boolean(api.imageVideo);
   for (const id of ['prepareImageVideoBtn', 'prepareScenesBtn']) $(id).disabled = busy || !supported || !current?.imageUrl;
   const shot = selectedImageShot();
@@ -1093,8 +1095,9 @@ async function regenerateImage() {
   if (busy || !current) return;
   if (!(await saveImageEditsBeforeNavigation())) return;
   if (!(await ensureLogin())) return;
+  const isRetry = Boolean(current.imageUrl || current.imageError);
   setBusy(true);
-  setStatus('보드 이미지를 다시 생성하는 중…');
+  setStatus(isRetry ? '보드 이미지를 다시 생성하는 중…' : '현재 명세로 보드 이미지를 생성하는 중…');
   try {
     const res = await api.board({ id: current.id, aspectRatio: current.input?.aspectRatio });
     if (!res.ok) {
@@ -1103,7 +1106,7 @@ async function regenerateImage() {
       setStatus(`이미지 재생성 실패: ${res.error}`);
     } else {
       renderEntry(res.entry, { focus: 'image' });
-      setStatus('보드 이미지를 다시 생성했습니다.');
+      setStatus(isRetry ? '보드 이미지를 다시 생성했습니다.' : '보드 이미지를 생성했습니다.');
     }
     await refreshHistory();
   } finally {
