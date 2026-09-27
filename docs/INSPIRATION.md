@@ -15,7 +15,7 @@ Charlie Hills's [public motion graphics article](https://charliehills.substack.c
 | Iteration | Revise one scene while retaining approved scenes and assets | Planned |
 | Editable HTML | Make the existing composition easier to preview and export alongside video | Planned |
 
-These are project proposals, not claims about the article's source code. The current port already connects the original structured direction, motion code, frame review, and audio/video pipeline. Integration verification is ongoing; live providers and external-font fidelity remain unverified. The [roadmap](ROADMAP.md) separates that acceptance work from new features.
+These are project proposals, not claims about the article's source code. The port connects the original structured direction, motion code, frame review, and audio/video pipeline. Isolated checks and a real-account structured production run have passed. The [roadmap](ROADMAP.md) separates broader acceptance work from new features.
 
 ## Attribution
 

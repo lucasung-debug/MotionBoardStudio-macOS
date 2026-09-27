@@ -2,7 +2,7 @@
 
 The source in [upstream/MotionBoardStudio-0.3.2](../upstream/MotionBoardStudio-0.3.2) remains the implementation reference. The macOS port preserves the original workflow and replaces Electron's desktop integration with a Swift host and a local Node.js process. No original GitHub repository URL was supplied; this is a source-based port.
 
-Implementation of the preserved workflow is complete, and the packaged app has passed the local fixture-based production and native UI checks documented below. Real-provider acceptance remains pending. The earlier sixteen-tile Swift editor is retained as `MotionBoardPrototype`; its results do not establish original-app parity.
+Implementation of the preserved workflow is complete. The app passed isolated production/native UI checks and a separate real-account ChatGPT → board → Claude direction/review → Mixkit → MP4 → history run. The earlier sixteen-tile Swift editor is retained as `MotionBoardPrototype`; its results do not establish original-app parity.
 
 ## Preserved production flow
 
@@ -33,7 +33,7 @@ The store preserves entries instead of silently applying the original 60-entry t
 
 `MotionBoardStudio` is the SwiftPM product for the original app. The Swift host starts a local Node worker with a restricted environment; provider tokens are not inherited. Tokens remain in the worker and the app-specific Keychain service, while the interface receives public account status.
 
-Source runs need an installed Node.js executable. The validated local bundle, `dist/MotionBoard Studio 0.3.2-mac.1.app`, includes the official Node.js 24.21.0 arm64 runtime. Archive checksum, system-library dependencies, bundled runtime source hashes, and deep/strict ad-hoc signature verification passed. The build script defaults to `dist/MotionBoard Studio Original 0.3.2.app` unless given another destination. FFmpeg is installed separately or selected through the app.
+Source runs need an installed Node.js executable. The local bundles include the official Node.js 24.21.0 arm64 runtime. Archive checksum, system-library dependencies, bundled runtime source hashes, and deep/strict ad-hoc signature verification passed. The latest bundle is `dist/MotionBoard Studio 0.3.2-mac.2.app`, which adds the explicit live verification command. The build script defaults to `dist/MotionBoard Studio Original 0.3.2.app` unless given another destination. FFmpeg is installed separately or selected through the app.
 
 ## Verification and next steps
 
@@ -46,9 +46,10 @@ Source runs need an installed Node.js executable. The validated local bundle, `d
 | Native services | An isolated synthetic Keychain CRUD test passed and cleaned up; selected-image conversion, rejection of unselected outside images, and media byte ranges passed |
 | Native interface | The real WebKit bridge, five tabs, forms, history opening, board loading, video decoding, muted playback, seeking, and subframe access rejection passed; the 1380×900 screenshot was inspected |
 | Public music catalog | A separate live Mixkit check returned three eligible tracks and downloaded 524,288 bytes of MP3, identified as 44,100 Hz stereo; this is a bounded sample, not a complete catalog acceptance |
-| Account and font acceptance | Real ChatGPT/Claude login, renewal, streaming/generation, and external Google Fonts fidelity remain unverified |
+| Live account production | App-connected accounts generated a real ChatGPT specification/1254×1254 board and Claude direction/review; automatic Mixkit music, 1440×1440 MP4 at 60 fps, and history round trip passed |
+| Fonts and account limits | Four Google FontFace entries loaded and captures were inspected; broad visual parity and live expiry/renewal/quota cases remain open |
 | Distribution | The local arm64 bundle passed signature and runtime checks; Intel, clean-machine installation, Developer ID signing, and notarization remain unverified |
 
 The packaged combined run is recorded in `.local/verification-release-004/native-receipt.json`. Full-size production evidence is in `.local/verification-original-full-002/verification/receipt.json`, and the 1080p UI playback check is in `.local/verification-native-ui-003/native-ui-receipt.json`. These are local evidence paths, not published download links.
 
-Next, complete fresh real-account login and generation acceptance, external-font comparison, and distribution checks. Fixture credentials and provider responses cannot certify those behaviors. [ORIGINAL-VALIDATION.md](ORIGINAL-VALIDATION.md) lists the commands, measurements, and separation from prototype tests; [SOURCE-PROVENANCE.md](SOURCE-PROVENANCE.md) records attribution.
+The live receipt is `.local/verification-live-005/live-receipt.json`; independent codec/frame-count checks are in its `media-receipt.json`. Continue with broader account/error cases, visual comparison, and distribution checks. [ORIGINAL-VALIDATION.md](ORIGINAL-VALIDATION.md) lists the commands, measurements, and separation from prototype tests; [SOURCE-PROVENANCE.md](SOURCE-PROVENANCE.md) records attribution.

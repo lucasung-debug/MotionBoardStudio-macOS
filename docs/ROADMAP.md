@@ -1,6 +1,6 @@
 # Original-application roadmap
 
-The creator-provided MotionBoardStudio 0.3.2 workflow is implemented in the Swift macOS host, WebKit, and local Node runtime. Local production and native UI checks pass. Real-provider acceptance and broader distribution checks remain open.
+The creator-provided MotionBoardStudio 0.3.2 workflow is implemented in the Swift macOS host, WebKit, and local Node runtime. Local production, native UI, and a real-account end-to-end generation run pass. Broader account and distribution checks remain open.
 
 ## Implemented and locally verified
 
@@ -13,13 +13,13 @@ The creator-provided MotionBoardStudio 0.3.2 workflow is implemented in the Swif
 - Verify app-specific authentication behavior with mocks and actual Keychain CRUD using a unique synthetic test service, followed by cleanup.
 - Package official Node.js 24.21.0 arm64, retain its provenance/license, and verify the local bundle's ad-hoc signature.
 
-The public Mixkit catalog and a bounded MP3 download passed a separate live check. Provider account states and AI responses in the production/UI checks remained fixtures. The earlier tile editor and its tests are separate prototype evidence.
+The isolated production/UI checks used fixture account states and AI responses. A separate live run subsequently used fresh app accounts: ChatGPT generated the specification and board, Claude generated and reviewed direction, and five actual Mixkit candidates were analyzed before rendering a 1440×1440, 60 fps, 8.8-second video. Four actual Google FontFace entries also passed loading checks. The earlier tile editor and its tests remain separate prototype evidence.
 
-## Live acceptance remains open
+## Broader acceptance remains open
 
-- Complete fresh ChatGPT and Claude login, renewal, streaming, generation, error handling, and account-state checks with real accounts.
-- Compare external Google Fonts loading, Korean glyph metrics, and representative generated compositions.
-- Extend the bounded music-catalog sample to the normal automatic-selection workflow.
+- Exercise real token renewal, quota exhaustion, and additional account/error cases beyond the successful fresh-login run.
+- Compare Korean glyph metrics and more generated compositions against Windows output.
+- Broaden coverage of music categories and free-code generations; the live acceptance run used the structured direction engine.
 
 ## Distribution remains open
 

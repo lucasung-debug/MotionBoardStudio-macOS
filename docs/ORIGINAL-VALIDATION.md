@@ -1,6 +1,6 @@
 # Original-app validation
 
-Recorded on 2026-09-27 for the local arm64 macOS implementation. The packaged app, original production pipeline, and native interface passed the checks below. Provider responses and visible account states were fixtures; real ChatGPT/Claude login and generation remain unverified.
+Recorded on 2026-09-27 for the arm64 macOS implementation. The packaged app, original production pipeline, and native interface passed isolated checks. A separate real-account generation run subsequently passed with ChatGPT, Claude, and automatic Mixkit music. The evidence is separated below; the published UI screenshot still shows fixture account states.
 
 ## Results and scope
 
@@ -23,7 +23,9 @@ The combined receipt is `.local/verification-release-004/native-receipt.json`. F
 
 ## Runtime and source integrity
 
-The validated bundle is `dist/MotionBoard Studio 0.3.2-mac.1.app`. Its official Node.js runtime is **v24.21.0, arm64**. The archive checksum and system-library-only dependencies were checked, all eight bundled runtime files matched current source hashes, and `codesign --verify --deep --strict` passed for the ad-hoc signed bundle. Authentication and engine checks also passed as 41 tests under bundled Node.js.
+The combined fixture validation used `dist/MotionBoard Studio 0.3.2-mac.1.app`. The latest bundle is `dist/MotionBoard Studio 0.3.2-mac.2.app`, adding the explicit live-verification entry point. Both use official Node.js **v24.21.0, arm64**. The archive checksum and system-library-only dependencies were checked, all eight bundled runtime files matched current source hashes, and `codesign --verify --deep --strict` passed for the ad-hoc signed bundles. Authentication and engine checks also passed as 41 tests under bundled Node.js.
+
+The final `mac.2` bundle also passed native UI verification with exit 0, including the original forms, history/board loading, 1080p video playback and seeking, and subframe bridge rejection. Its receipt is `.local/verification-release2-ui-006/native-ui-receipt.json`; account states in this UI-only run were fixtures.
 
 Node archive SHA-256: `bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057`. The bundle retains `Node-provenance.json` and `Node-LICENSE.txt`; its recorded source is the [official Node.js archive](https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-arm64.tar.gz).
 
@@ -71,10 +73,36 @@ await mixkit.downloadHead(tracks[0], cacheDir, { bytes: 512 * 1024, signal });
 
 This verifies that sample's catalog/filter/download path, not all tracks or the complete automatic-music production workflow.
 
-## Remaining acceptance
+## Real-account production
+
+After the operator completed both logins in the application, the source-built app ran:
+
+```sh
+.build/debug/MotionBoardStudio --verify-live --output .local/verification-live-005
+```
+
+This explicit command consumes provider usage and downloads public music. It reads only this application's Keychain accounts and writes a new, isolated history directory. It never substitutes provider responses. To reproduce from a fresh checkout, use `swift run MotionBoardStudio --verify-live --output .local/live-new` after connecting both accounts in the normal app. Choose an unused output directory.
+
+The command returned exit 0. Its actual results were:
+
+| Stage | Observed result |
+| --- | --- |
+| Specification | `gpt-6-astra`, `xhigh`; 10,951 YAML characters and 5,015 board-prompt characters; no model fallback |
+| Board | Real image-generation response, 1254×1254 PNG, 4×4 composition; response reports the orchestrating model as `gpt-6-astra` |
+| Direction and review | `claude-opus-5-5`; structured engine, native validation, and frame review completed; `reviewed=true`, repairs 0 |
+| Music | Five actual candidates analyzed; “Pop Track 03” by Lily J selected, 109.0048 BPM; reported Mixkit Stock Music Free License |
+| Video | 1440×1440 H.264, 60 fps, 528 frames, 8.8 seconds, four subframes per frame |
+| Audio | AAC, 48,000 Hz, stereo; decoded mean volume −14.2 dB, maximum −0.8 dB |
+| Persistence | Completed image/video entry was reopened through the history API with the same video URL |
+
+The requested eight-second duration became 8.8 seconds through the original beat/bar quantization. FFprobe independently confirmed the codecs and frame count; FFmpeg decoded all 528 frames and the audio stream without errors. The generated board, review sheet, poster, and a contact sheet extracted from the encoded MP4 were inspected. This is one successful structured production run; it does not certify every account, composition, or live error case.
+
+Local evidence: `.local/verification-live-005/live-receipt.json`, `media-receipt.json`, and `encoded-video-contact-sheet.png`. Convenient local copies are `dist/MAC MOTION - live verification.mp4` and `dist/MAC MOTION - 4x4 board.png`. Neither credentials nor downloaded audio were published. Music attribution and its [reported license](https://mixkit.co/license/#musicFree) remain attached to the history metadata.
+
+## Fonts and remaining acceptance
 
 An additional live-font check loaded Black Han Sans 400, Anton 400, and Noto Sans KR 500/700 in the unchanged original 1920×1080 composition. All four FontFace entries were `loaded`; Korean and Latin captures were inspected. WebKit exposed the Google stylesheet timing, but not gstatic font timings. A diagnostic requiring those timing entries returned exit 1; separate retrieval of the stylesheet and its four font URLs confirmed gstatic HTTP 200. No font-loading or composition error was observed. The local receipt is `.local/google-fonts-validation/verification-summary.json`. Windows pixel equivalence and general font fidelity are not established by this sample.
 
-Fresh real-account login, renewal, live streaming/generation, and account errors require real-provider acceptance. Fixture responses do not prove them. The native playback check was muted; it establishes media decoding and advancing playback, not a subjective listening review.
+Fresh app login and the live workflow above passed. Real token expiry/renewal, quota exhaustion, additional account/error cases, and live free-code generation were not covered by that run; their implemented contracts have isolated test coverage where recorded. The native playback check was muted; the live audio measurements establish decoding and non-silent output, not a subjective listening review.
 
 Intel hardware, clean-machine installation, Developer ID signing, and notarization remain unverified. No benchmark, universal visual parity, or production-account compatibility is inferred from these local checks.

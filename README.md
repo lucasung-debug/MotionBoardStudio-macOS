@@ -4,7 +4,7 @@ A source-based macOS port of the creator-provided **MotionBoardStudio 0.3.2** ap
 
 The Swift macOS host presents the original interface in WebKit. A local Node.js process runs the production logic; native Swift services provide Keychain access, file dialogs, asset delivery, and DOM frame capture. The macOS runtime does not require Electron. This is a Swift host with preserved JavaScript production code, not a complete rewrite of that code in Swift.
 
-**Status:** implementation of the preserved production workflow is complete. The packaged app passed local pipeline, native UI, media, and credential-storage checks. Live ChatGPT/Claude login and generation acceptance remains pending; external Google Fonts fidelity is not yet established.
+**Status:** the preserved production workflow is implemented and has passed both isolated checks and a real-account generation run. Fresh app logins were used for ChatGPT specification/board generation and Claude direction/frame review, followed by automatic Mixkit music, native rendering, and history persistence. The live result was a 1440×1440, 60 fps, 8.8-second H.264/AAC video. This is acceptance of that recorded workflow, not a guarantee for every account or generated composition.
 
 ![Native macOS interface showing a local verification production](docs/images/native-studio.png)
 
@@ -41,7 +41,7 @@ This launches the original production application. Its current interface is in K
 scripts/build-app.sh
 ```
 
-The default output is `dist/MotionBoard Studio Original 0.3.2.app`; pass a different destination as the first argument to preserve an existing bundle. The validated local bundle is `dist/MotionBoard Studio 0.3.2-mac.1.app`. It includes the official Node.js 24.21.0 arm64 runtime and passed ad-hoc signature verification. FFmpeg remains a separate installation or user-selected executable. Intel, clean-machine installation, Developer ID signing, and notarization have not been verified.
+The default output is `dist/MotionBoard Studio Original 0.3.2.app`; pass a different destination as the first argument to preserve an existing bundle. The latest local bundle is `dist/MotionBoard Studio 0.3.2-mac.2.app`. It includes the official Node.js 24.21.0 arm64 runtime and passed ad-hoc signature verification. FFmpeg remains a separate installation or user-selected executable. Intel, clean-machine installation, Developer ID signing, and notarization have not been verified.
 
 ## Verification
 
@@ -52,7 +52,7 @@ scripts/verify-render.sh .local/original-validation-new
 
 Use a new output directory for native verification. The script verifies the original production app and requires FFmpeg plus a usable macOS graphical session. For production dimensions, run `swift run MotionBoardStudio --verify-original --full-size --output .local/original-full-validation-new`. Provider responses are local fixtures. A separate Keychain test creates and removes its own synthetic item; no real account credential is used.
 
-Recorded results include 43 original-app authentication/engine/bridge checks, native production rendering with audio, three production-size DOM captures, free-code rendering, cancellation preservation, and native UI playback/seeking. A separate public Mixkit check returned three eligible tracks and downloaded a bounded MP3 sample. See [ORIGINAL-VALIDATION.md](docs/ORIGINAL-VALIDATION.md) for exact values, commands, and remaining limits.
+Recorded results include 43 original-app authentication/engine/bridge checks, native production rendering with audio, three production-size DOM captures, free-code rendering, cancellation preservation, and native UI playback/seeking. The separate live run used real providers and selected music after analyzing five Mixkit candidates. Google Fonts loading was also verified with four actual FontFace entries. See [ORIGINAL-VALIDATION.md](docs/ORIGINAL-VALIDATION.md) for exact values, commands, and remaining limits.
 
 ## Project layout
 
