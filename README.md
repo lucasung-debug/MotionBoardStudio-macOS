@@ -63,7 +63,7 @@ arm64 패키지에는 공식 Node.js 24.21.0과 별도로 컴파일한 FFmpeg가
 ## 검증
 
 ```sh
-node --test Tests/original-auth.test.cjs Tests/original-engine.test.cjs Tests/specification.test.cjs Tests/original-bridge.test.cjs Tests/original-preview.test.cjs
+node --test Tests/original-auth.test.cjs Tests/original-engine.test.cjs Tests/specification.test.cjs Tests/claude-activity.test.cjs Tests/original-bridge.test.cjs Tests/original-preview.test.cjs
 node --test Tests/video-providers.test.cjs Tests/image-video.test.cjs Tests/studio-ui.test.cjs Tests/image-video-media.test.cjs
 scripts/verify-render.sh .local/original-validation-new
 ```
@@ -75,6 +75,8 @@ scripts/verify-render.sh .local/original-validation-new
 기존 제작 경로의 네이티브 렌더·취소 복구·재생·탐색·실계정 검증은 [ORIGINAL-VALIDATION.md](docs/ORIGINAL-VALIDATION.md)에, 공개 mac.3 설치본의 57개 테스트와 실제 렌더 결과는 [DISTRIBUTION.md](docs/DISTRIBUTION.md)에 기록했습니다. 새 기능의 유료 Grok·Kling 실생성 검증은 아직 남아 있습니다.
 
 현재 개발본은 명세 응답의 JSON 줄바꿈 오류를 복구하고, 그 외 형식 오류는 같은 서비스·모델에 한 번만 보정을 요청합니다. 잘린 응답과 인증 오류는 따로 표시하며 불완전한 명세는 저장하지 않습니다. 수정 내용과 검증 기록은 [명세 응답 처리](docs/SPECIFICATION-RECOVERY.md)에 있습니다. 이 수정도 기존 공개 mac.3 DMG에는 포함되어 있지 않습니다.
+
+Claude 명세 작성에는 같은 Opus 5.5의 **작성 속도**를 선택할 수 있습니다. 기본값은 **균형**이며, 요청 접수·검토·본문 수신 상태와 경과 시간을 표시합니다. 응답 대기 상한은 빠르게·균형 5분, 깊게 10분, 더 깊게·최대 15분입니다. 연결 유지 신호가 계속 와도 이 상한은 늘어나지 않습니다. 이미 전송한 요청에는 속도 변경이 소급 적용되지 않습니다.
 
 ## 소스 구성
 

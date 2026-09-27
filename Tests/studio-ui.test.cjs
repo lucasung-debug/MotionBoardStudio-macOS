@@ -76,6 +76,57 @@ test('all sixteen cells remain visible, with twelve default shots and preserved 
   assert.notEqual(entry.imageVideo.shots[0].prompt, 'Edited');
 });
 
+test('Claude specification speed defaults to balanced and preserves explicit choices in the request', () => {
+  const app = harness();
+  app.get('provider').value = 'claude';
+  assert.equal(app.evaluate('collectInput().claudeEffort'), 'medium');
+  app.get('claudeEffort').value = 'max';
+  assert.equal(app.evaluate('collectInput().claudeEffort'), 'max');
+  app.evaluate("envInfo = {claudeModel: 'claude-opus-5-5'}; updateModelBadge(); updateImageChoice();");
+  assert.equal(app.get('claudeEffortRow').hidden, false);
+  assert.equal(app.get('modelBadge').textContent, 'claude-opus-5-5 · 최대');
+  assert.match(app.get('claudeEffortHint').textContent, /15분/);
+  app.get('claudeEffort').value = 'invalid';
+  assert.equal(app.evaluate('collectInput().claudeEffort'), 'medium');
+  app.get('provider').value = 'chatgpt'; app.evaluate('updateImageChoice()');
+  assert.equal(app.get('claudeEffortRow').hidden, true);
+});
+
+test('request activity distinguishes waiting from thinking and does not flood the log', () => {
+  const app = harness(); app.evaluate('setBusy(true)');
+  assert.equal(app.get('claudeEffort').disabled, true);
+  assert.equal(app.get('provider').disabled, true);
+  app.evaluate("handleProgress({phase:'spec_wait',state:'waiting',elapsedSeconds:125,lastActivitySeconds:2,textCharacters:0,heartbeatCount:25})");
+  assert.doesNotMatch(app.get('statusText').textContent, /검토/);
+  assert.match(app.get('requestDetail').textContent, /2분 5초.*2초.*아직/);
+  const log = app.get('log').textContent;
+  app.evaluate("handleProgress({phase:'spec_wait',state:'waiting',elapsedSeconds:130,lastActivitySeconds:1,textCharacters:0,heartbeatCount:26})");
+  assert.equal(app.get('log').textContent, log);
+  app.evaluate("handleProgress({phase:'spec_wait',state:'thinking',elapsedSeconds:131,lastActivitySeconds:0,textCharacters:0})");
+  assert.match(app.get('statusText').textContent, /검토/);
+  app.evaluate("handleProgress({phase:'spec_wait',state:'writing',elapsedSeconds:135,lastActivitySeconds:0,textCharacters:42})");
+  assert.match(app.get('statusText').textContent, /42자 수신/);
+  app.evaluate("handleProgress({phase:'parse',message:'명세 해석 중'})");
+  assert.equal(app.get('requestDetail').hidden, true);
+  app.evaluate("setBusy(false); setStatus('완료'); handleProgress({phase:'spec_wait',state:'waiting',elapsedSeconds:150})");
+  assert.equal(app.get('requestDetail').hidden, true);
+  assert.equal(app.get('statusText').textContent, '완료');
+  assert.equal(app.get('claudeEffort').disabled, false);
+});
+
+test('stored forms without the new Claude speed field keep the balanced default', () => {
+  const app = harness();
+  app.get('claudeEffort').value = 'medium';
+  app.context.localStorage.getItem = () => JSON.stringify({topic:'Existing topic',provider:'claude'});
+  app.evaluate('restoreForm()');
+  assert.equal(app.evaluate('collectInput().claudeEffort'), 'medium');
+  assert.equal(app.get('topic').value, 'Existing topic');
+  let saved;
+  app.context.localStorage.setItem = (_key,value) => { saved = JSON.parse(value); };
+  app.get('claudeEffort').value = 'low'; app.evaluate('saveForm()');
+  assert.equal(saved.claudeEffort, 'low');
+});
+
 test('paid generation includes only explicitly selected draft and failed scenes', () => {
   const statuses = ['draft', 'failed', 'pending', 'submitting', 'uncertain', 'succeeded'];
   const shots = statuses.map((status, id) => ({ id, status, enabled: true }));

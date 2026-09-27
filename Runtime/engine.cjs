@@ -11,6 +11,7 @@ const { createStore } = require("./store.cjs");
 const { createRenderer } = require("./render.cjs");
 const { createImageVideoService } = require("./image-video.cjs");
 const specification = require("./specification.cjs");
+const { createClaudeActivity } = require("./claude-activity.cjs");
 
 async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {}, authServices, testProviders = {} }) {
   if (!path.isAbsolute(sourceRoot || "") || !path.isAbsolute(userData || "")) throw new Error("Absolute source and data directories are required.");
@@ -130,6 +131,7 @@ async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {},
   async function runSpec(input) {
     return withRun("spec", null, async (run, report) => {
       const provider = normalizeProvider(input.provider), mode = normalizeMode(input.mode);
+      const claudeOptions = specification.claudeOptions(input);
       const signal = run.controller.signal;
       report({ phase: "prepare", message: `${providerName(provider)} 로그인과 가이드를 확인하는 중…` });
       const guide = prompt.loadGuide(promptsDir);
@@ -140,10 +142,21 @@ async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {},
       const requestSpecification = async (text, { repair = false } = {}) => {
         if (provider === "claude") {
           const { token } = rememberAuth(await claudeAuth.getAuth()); checkAbort(signal);
-          if (!repair) report({ phase: "request", message: `${claude.DEFAULT_MODEL}에 제작 명세를 요청했습니다…` });
-          const response = await claude.chat({ token, instructions, userText: text, finalDirective: specification.directive(contractMode),
-            model: claude.DEFAULT_MODEL, effort: claude.DEFAULT_EFFORT, signal, onDelta, fetchImpl: testProviders.fetchImpl });
-          return { ...response, requestedModel: claude.DEFAULT_MODEL, reasoningEffort: response.effort, fallbackReason: "" };
+          if (!repair) report({ phase: "request", message: `${claude.DEFAULT_MODEL}에 제작 명세를 요청했습니다 · 추론 ${claudeOptions.effort} · 응답 대기 상한 ${claudeOptions.timeoutMs / 60_000}분` });
+          const activity = createClaudeActivity({ fetchImpl: testProviders.fetchImpl, signal,
+            timeoutMs: testProviders.specificationTimeoutMs ?? claudeOptions.timeoutMs,
+            onProgress: payload => report({ phase: "spec_wait", ...payload }) });
+          try {
+            const response = await claude.chat({ token, instructions, userText: text, finalDirective: specification.directive(contractMode),
+              model: claude.DEFAULT_MODEL, effort: claudeOptions.effort, signal: activity.signal,
+              onDelta: delta => { activity.observeDelta(delta); onDelta(delta); }, fetchImpl: activity.fetchImpl });
+            checkAbort(signal);
+            if (activity.timeoutError) throw activity.timeoutError;
+            return { ...response, requestedModel: claude.DEFAULT_MODEL, reasoningEffort: response.effort || claudeOptions.effort, fallbackReason: "" };
+          } catch (error) {
+            checkAbort(signal);
+            throw activity.timeoutError || error;
+          } finally { activity.dispose(); }
         }
         const { accessToken, accountId } = rememberAuth(await auth.getAuth()); checkAbort(signal);
         if (!repair) report({ phase: "request", message: `${codex.DEFAULT_MODEL}에 제작 명세를 요청했습니다…` });
@@ -181,7 +194,8 @@ async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {},
       }
       if (decoded.locallyRepaired) report({ phase: "spec_repaired", message: "응답의 줄바꿈 표기를 정리했습니다. 제작 내용은 그대로 유지했습니다." });
       const parsed = decoded.parsed;
-      const entry = { id: crypto.randomUUID(), createdAt: Date.now(), updatedAt: Date.now(), input: { ...input, mode }, provider,
+      const entry = { id: crypto.randomUUID(), createdAt: Date.now(), updatedAt: Date.now(),
+        input: { ...input, mode, ...(provider === "claude" ? { claudeEffort: claudeOptions.effort } : {}) }, provider,
         title: parsed.title, concept: parsed.concept, yaml: parsed.yaml, imagePrompt: parsed.imagePrompt, notes: parsed.notes,
         model: result.model, requestedModel: result.requestedModel, reasoningEffort: result.reasoningEffort,
         fallbackReason: result.fallbackReason || "", guideName: guide.name, imagePath: "", imageModel: "", imageNote: "", imageError: "" };
@@ -317,7 +331,7 @@ async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {},
 
   const handlers = {
     "studio:env": async () => ({ ok: true, ffmpeg: ffmpeg.locate(), model: codex.DEFAULT_MODEL, reasoningEffort: codex.DEFAULT_REASONING,
-      claudeModel: claude.DEFAULT_MODEL, claudeEffort: claude.DEFAULT_EFFORT, guideName: prompt.loadGuide(promptsDir).name,
+      claudeModel: claude.DEFAULT_MODEL, claudeEffort: specification.DEFAULT_CLAUDE_EFFORT, guideName: prompt.loadGuide(promptsDir).name,
       appVersion, dataDir: store.baseDir, platform: "darwin" }),
     "studio:guide": async () => { const guide = prompt.loadGuide(promptsDir); return { ok: true, name: guide.name, content: guide.content }; },
     "studio:authStatus": async () => ({ ok: true, status: await auth.status() }),

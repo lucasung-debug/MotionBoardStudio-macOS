@@ -76,6 +76,7 @@ enum OriginalLiveVerification {
     /// selected app account and writes generated data to a new isolated folder.
     private static func runSpecification(arguments: [String]) async -> Int32 {
         let runtime = RuntimeBridge()
+        let startedAt = Date()
         var actions: NativeActions?
         var destination: URL?
         var evidence: [String: JSONValue] = ["liveProviders": .bool(true), "specificationOnly": .bool(true), "ok": .bool(false)]
@@ -94,11 +95,25 @@ enum OriginalLiveVerification {
             let native = NativeActions(userData: output)
             actions = native
             runtime.nativeCall = { method, params in try await native.handle(method: method, params: params) }
-            var phases: [String] = [], previousPhase = ""
+            var phases: [String] = [], previousPhase = "", previousState = ""
+            var activityStates: [String] = []
             runtime.onEvent = { event, payload in
-                guard event == "studio:progress", let phase = payload["phase"].stringValue, phase != previousPhase else { return }
-                previousPhase = phase; phases.append(phase)
-                print("Specification verification: \(phase)"); fflush(stdout)
+                guard event == "studio:progress", let phase = payload["phase"].stringValue else { return }
+                if phase != previousPhase {
+                    previousPhase = phase; phases.append(phase)
+                    evidence["phases"] = .array(phases.map(JSONValue.string))
+                    print("Specification verification: \(phase)"); fflush(stdout)
+                }
+                if phase == "spec_wait", let state = payload["state"].stringValue,
+                   ["connecting", "accepted", "thinking", "writing", "waiting"].contains(state) {
+                    if state != previousState {
+                        previousState = state; activityStates.append(state)
+                        evidence["activityStates"] = .array(activityStates.map(JSONValue.string))
+                        print("Specification activity: \(state)"); fflush(stdout)
+                    }
+                    evidence["lastActivity"] = .object(["state": .string(state), "elapsedSeconds": payload["elapsedSeconds"],
+                        "lastActivitySeconds": payload["lastActivitySeconds"], "textCharacters": payload["textCharacters"]])
+                }
             }
             try await runtime.start(userData: output)
             let status = try await requireOK(runtime.invoke(provider == "claude" ? "studio:claudeStatus" : "studio:authStatus"))
@@ -106,6 +121,8 @@ enum OriginalLiveVerification {
             evidence["provider"] = .string(provider)
             let result = try await runtime.invoke("studio:spec", params: .object(input))
             evidence["phases"] = .array(phases.map(JSONValue.string))
+            evidence["elapsedSeconds"] = .number(Date().timeIntervalSince(startedAt))
+            evidence["errorCode"] = result["code"]
             _ = try requireOK(result)
             let entry = result["entry"]
             guard let id = entry["id"].stringValue, entry["imagePrompt"].stringValue?.isEmpty == false,
@@ -116,6 +133,7 @@ enum OriginalLiveVerification {
             guard reopened["entry"]["yaml"] == entry["yaml"] else { throw StudioError("Specification history verification failed.") }
             evidence["entryID"] = .string(id)
             evidence["model"] = entry["model"]
+            evidence["reasoningEffort"] = entry["reasoningEffort"]
             evidence["yamlCharacters"] = .number(Double(entry["yaml"].stringValue?.count ?? 0))
             evidence["imagePromptCharacters"] = .number(Double(entry["imagePrompt"].stringValue?.count ?? 0))
             evidence["imageGenerated"] = .bool(false); evidence["videoGenerated"] = .bool(false)
@@ -127,6 +145,7 @@ enum OriginalLiveVerification {
         } catch {
             actions?.renderer.closeAll(); runtime.stop()
             evidence["error"] = .string(error.localizedDescription)
+            evidence["elapsedSeconds"] = .number(Date().timeIntervalSince(startedAt))
             if let destination { try? save(evidence, to: destination) }
             fputs("Specification verification failed: \(error.localizedDescription)\n", stderr)
             return 1

@@ -12,9 +12,11 @@ enum OriginalUIVerification {
     static func run(dataRoot: URL, output: URL) async throws -> JSONValue {
         let screenshot = output.appendingPathComponent("native-ui.png")
         let imageVideoScreenshot = output.appendingPathComponent("native-image-video.png")
+        let requestScreenshot = output.appendingPathComponent("native-request-status.png")
         let receiptFile = output.appendingPathComponent("native-ui-receipt.json")
         guard !FileManager.default.fileExists(atPath: screenshot.path),
               !FileManager.default.fileExists(atPath: imageVideoScreenshot.path),
+              !FileManager.default.fileExists(atPath: requestScreenshot.path),
               !FileManager.default.fileExists(atPath: receiptFile.path) else {
             throw StudioError("Native UI verification artifacts already exist; choose another output directory.")
         }
@@ -217,6 +219,41 @@ enum OriginalUIVerification {
             return {width:innerWidth,height:innerHeight};
             """)
             let capture = try await saveSnapshot(web, window: window, to: screenshot)
+            let specificationControls = try await javascript(web, body: """
+            window.__specVerificationSaved = {provider:document.getElementById('provider').value,
+              effort:document.getElementById('claudeEffort').value};
+            const choose=(id,value)=>{const node=document.getElementById(id);node.value=value;node.dispatchEvent(new Event('change',{bubbles:true}));};
+            choose('provider','claude'); choose('claudeEffort','high');
+            if (collectInput().claudeEffort!=='high' || document.getElementById('claudeEffortRow').hidden
+              || !document.getElementById('modelBadge').textContent.includes('깊게')) throw new Error('Claude speed selection was not applied.');
+            choose('claudeEffort','medium');
+            if (collectInput().claudeEffort!=='medium' || !document.getElementById('claudeEffortHint').textContent.includes('5분'))
+              throw new Error('Balanced specification setting is missing.');
+            setBusy(true);
+            handleProgress({phase:'spec_wait',state:'waiting',elapsedSeconds:125,lastActivitySeconds:1,textCharacters:0,heartbeatCount:10});
+            if (document.getElementById('statusText').textContent.includes('검토') || document.getElementById('requestDetail').hidden
+              || !document.getElementById('requestDetail').textContent.includes('2분 5초')) throw new Error('Waiting was mislabeled as model thinking.');
+            handleProgress({phase:'spec_wait',state:'thinking',elapsedSeconds:126,lastActivitySeconds:0,textCharacters:0});
+            if (!document.getElementById('statusText').textContent.includes('검토') || !document.getElementById('claudeEffort').disabled
+              || document.getElementById('cancelBtn').disabled) throw new Error('Thinking status or cancellation controls are incorrect.');
+            window.scrollTo(0,0);
+            document.querySelector('.form-panel').scrollTop=document.querySelector('.form-panel').scrollHeight;
+            await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+            return {selectedEffort:'medium',selectedModel:envInfo.claudeModel,choiceApplied:true,waitingIsNotThinking:true,
+              elapsedVisible:true,cancellationAvailable:true,syntheticActivity:true};
+            """)
+            let requestCapture = try await saveSnapshot(web, window: window, to: requestScreenshot)
+            _ = try await javascript(web, body: """
+            setBusy(false);
+            document.getElementById('provider').value=window.__specVerificationSaved.provider;
+            document.getElementById('claudeEffort').value=window.__specVerificationSaved.effort;
+            delete window.__specVerificationSaved;
+            updateModelBadge(); updateImageChoice();
+            setStatus('로컬 UI 검증 완료');
+            document.querySelector('.form-panel').scrollTop=0;
+            if (!document.getElementById('requestDetail').hidden) throw new Error('Request activity remained after completion.');
+            return true;
+            """)
             let imageVideo = try await verifyImageVideo(web, coordinator: coordinator)
             let imageVideoCapture = try await saveSnapshot(web, window: window, to: imageVideoScreenshot)
             var limitations: [JSONValue] = [.string("Provider responses and account status were offline fixtures; no real login or AI generation was tested.")]
@@ -232,6 +269,7 @@ enum OriginalUIVerification {
                 "nonPersistentWebData": .bool(true), "realProviderLoginTested": .bool(false),
                 "bridge": bridge, "board": board, "forms": forms, "video": video,
                 "playback": playback, "subframe": iframe, "screenshot": capture,
+                "specificationControls": specificationControls, "requestScreenshot": requestCapture,
                 "imageVideo": imageVideo, "imageVideoScreenshot": imageVideoCapture,
                 "limitations": .array(limitations)
             ])

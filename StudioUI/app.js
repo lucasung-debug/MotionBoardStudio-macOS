@@ -3,10 +3,12 @@
 const $ = (id) => document.getElementById(id);
 const api = typeof window === 'undefined' ? null : window.studio;
 const FORM_KEY = 'motion-board-studio.form.v1';
-const FORM_FIELDS = ['topic', 'provider', 'mood', 'style', 'copy', 'avoid', 'aspect', 'duration', 'dataNote', 'mode', 'extra', 'musicSource', 'quality', 'engine', 'imageVideoMusicSource'];
+const FORM_FIELDS = ['topic', 'provider', 'claudeEffort', 'mood', 'style', 'copy', 'avoid', 'aspect', 'duration', 'dataNote', 'mode', 'extra', 'musicSource', 'quality', 'engine', 'imageVideoMusicSource'];
 const FORM_CHECKS = ['withImage', 'withVideo', 'review'];
 const PROVIDER_LABELS = { chatgpt: 'ChatGPT', claude: 'Claude' };
 const CLAUDE_SOURCE_LABELS = { oauth: '', env: ' (환경변수 토큰)' };
+const CLAUDE_EFFORT_LABELS = { low: '빠르게', medium: '균형', high: '깊게', xhigh: '더 깊게', max: '최대' };
+let requestState = '';
 
 const PHASE_LABELS = {
   prepare: '준비',
@@ -68,6 +70,8 @@ function appendLog(text) {
 function clearLog() {
   $('log').textContent = '';
   streamedChars = 0;
+  requestState = '';
+  $('requestDetail').hidden = true;
 }
 
 // 이번 실행에서 보드 이미지를 만들지: ChatGPT 는 전체/이미지 모드에서 항상, Claude 는 체크했을 때만(선택).
@@ -90,8 +94,10 @@ function setBusy(value) {
   $('cancelBtn').disabled = !value;
   $('spinner').hidden = !value;
   $('makeVideoBtn').disabled = value;
+  $('provider').disabled = value;
+  $('claudeEffort').disabled = value;
   $('runBtn').textContent = value ? '생성 중…' : runLabel();
-  if (!value) hideProgress();
+  if (!value) { hideProgress(); $('requestDetail').hidden = true; requestState = ''; }
   refreshImageControls();
 }
 
@@ -141,6 +147,7 @@ function collectInput() {
   return {
     topic: $('topic').value.trim(),
     provider: $('provider').value,
+    claudeEffort: selectedClaudeEffort(),
     mood: $('mood').value.trim(),
     style: $('style').value.trim(),
     copy: $('copy').value.trim(),
@@ -204,6 +211,9 @@ function baseName(file) {
 function updateImageChoice() {
   const imageMode = creationMode === 'image_video';
   $('withImageRow').hidden = imageMode || $('provider').value !== 'claude';
+  $('claudeEffortRow').hidden = $('provider').value !== 'claude';
+  const effort = selectedClaudeEffort();
+  $('claudeEffortHint').textContent = `같은 Opus 5.5로 작성합니다. 응답 대기 상한은 ${['xhigh', 'max'].includes(effort) ? 15 : effort === 'high' ? 10 : 5}분입니다.`;
   $('motionVideoOptions').hidden = imageMode;
   $('outputModeField').hidden = imageMode;
   $('imageCreationNote').hidden = !imageMode;
@@ -879,8 +889,56 @@ function updateModelBadge() {
   if (!envInfo) return;
   const provider = $('provider').value;
   $('modelBadge').textContent = provider === 'claude'
-    ? `${envInfo.claudeModel} · effort ${envInfo.claudeEffort}`
+    ? `${envInfo.claudeModel} · ${CLAUDE_EFFORT_LABELS[selectedClaudeEffort()]}`
     : `${envInfo.model} · ${envInfo.reasoningEffort === 'xhigh' ? '초고추론(xhigh)' : envInfo.reasoningEffort}`;
+}
+
+function selectedClaudeEffort() {
+  return Object.hasOwn(CLAUDE_EFFORT_LABELS, $('claudeEffort').value) ? $('claudeEffort').value : 'medium';
+}
+
+function updateRequestActivity(payload) {
+  const seconds = value => Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+  const elapsed = seconds(payload.elapsedSeconds);
+  const state = ['connecting', 'accepted', 'thinking', 'writing', 'waiting'].includes(payload.state) ? payload.state : 'waiting';
+  const labels = {
+    connecting: 'Claude에 요청을 보내는 중…',
+    accepted: 'Claude가 요청을 받았습니다. 결과를 기다리는 중…',
+    thinking: 'Claude가 명세 구성을 검토하는 중…',
+    writing: `명세 작성 중… ${seconds(payload.textCharacters).toLocaleString()}자 수신`,
+    waiting: 'Claude 서버의 결과를 기다리는 중…'
+  };
+  const detail = $('requestDetail');
+  detail.hidden = false;
+  detail.textContent = `경과 ${Math.floor(elapsed / 60)}분 ${elapsed % 60}초 · ` + (payload.lastActivitySeconds == null
+    ? '서버 신호 수신 전' : `마지막 서버 신호 ${seconds(payload.lastActivitySeconds)}초 전`);
+  if (elapsed >= 120 && !payload.textCharacters) detail.textContent += ' · 결과 본문은 아직 도착하지 않았습니다.';
+  setStatus(labels[state]);
+  if (state !== requestState) {
+    appendLog(`\n[응답 상태] ${labels[state]}\n`);
+    requestState = state;
+  }
+}
+
+function handleProgress(payload) {
+  if (payload.phase === 'spec_wait') { if (busy) updateRequestActivity(payload); return; }
+  if (!['request', 'stream', 'spec_repair'].includes(payload.phase)) $('requestDetail').hidden = true;
+  if (payload.kind === 'reasoning') { appendLog(payload.text); return; }
+  if (payload.kind === 'text') {
+    streamedChars += payload.text.length;
+    setStatus(payload.phase === 'code_stream'
+      ? `모델이 영상 연출을 작성하는 중… ${streamedChars.toLocaleString()}자 수신`
+      : `명세 작성 중… ${streamedChars.toLocaleString()}자 수신`);
+    return;
+  }
+  if (payload.phase === 'render' && payload.total) { showProgress(payload.done / payload.total); setStatus(payload.message); return; }
+  if (['compose', 'repair', 'review', 'direct', 'script_fix', 'spec_repair'].includes(payload.phase)) streamedChars = 0;
+  if (['request', 'spec_repair'].includes(payload.phase)) requestState = '';
+  if (payload.message) {
+    const label = PHASE_LABELS[payload.phase] || payload.phase;
+    appendLog(`\n[${label}] ${payload.message}\n`);
+    setStatus(payload.message);
+  }
 }
 
 async function ensureLogin() {
@@ -1159,6 +1217,8 @@ function bindEvents() {
     saveForm();
   });
 
+  $('claudeEffort').addEventListener('change', () => { updateModelBadge(); updateImageChoice(); saveForm(); });
+
   for (const id of ['withImage', 'withVideo', 'review', 'musicSource', 'mode']) {
     $(id).addEventListener('change', () => {
       updateImageChoice();
@@ -1280,30 +1340,7 @@ async function init() {
   restoreForm();
   updateImageChoice();
   bindEvents();
-  api.onProgress((payload) => {
-    if (payload.kind === 'reasoning') {
-      appendLog(payload.text);
-      return;
-    }
-    if (payload.kind === 'text') {
-      streamedChars += payload.text.length;
-      setStatus(payload.phase === 'code_stream'
-        ? `모델이 영상 연출을 작성하는 중… ${streamedChars.toLocaleString()}자 수신`
-        : `명세 작성 중… ${streamedChars.toLocaleString()}자 수신`);
-      return;
-    }
-    if (payload.phase === 'render' && payload.total) {
-      showProgress(payload.done / payload.total);
-      setStatus(payload.message);
-      return;
-    }
-    if (['compose', 'repair', 'review', 'direct', 'script_fix', 'spec_repair'].includes(payload.phase)) streamedChars = 0;
-    if (payload.message) {
-      const label = PHASE_LABELS[payload.phase] || payload.phase;
-      appendLog(`\n[${label}] ${payload.message}\n`);
-      setStatus(payload.message);
-    }
-  });
+  api.onProgress(handleProgress);
   api.onAuth((status) => applyAuth(status));
   api.onClaudeAuth((status) => applyClaudeAuth(status));
 

@@ -21,6 +21,14 @@ const parse = (content, mode = "full", extra = {}) => specification.parseSpecifi
 );
 const formatError = error => error.code === "SPEC_FORMAT_INVALID" && error.repairable === true;
 
+test("Claude specification defaults follow the balanced effort and bound each chosen request", () => {
+  assert.deepEqual(specification.claudeOptions(), { effort: "medium", timeoutMs: 300000 });
+  assert.deepEqual(specification.claudeOptions({ claudeEffort: "invalid" }), { effort: "medium", timeoutMs: 300000 });
+  assert.deepEqual(specification.claudeOptions({ claudeEffort: "low" }), { effort: "low", timeoutMs: 300000 });
+  assert.deepEqual(specification.claudeOptions({ claudeEffort: "high" }), { effort: "high", timeoutMs: 600000 });
+  for (const effort of ["xhigh", "max"]) assert.deepEqual(specification.claudeOptions({ claudeEffort: effort }), { effort, timeoutMs: 900000 });
+});
+
 test("complete, prefaced, and fenced specifications preserve upstream normalization without repair", () => {
   const expected = prompt.normalizeResult(SPEC);
   for (const content of [JSON_SPEC, JSON.stringify(SPEC, null, 2), "```json\n" + JSON_SPEC + "\n```", "  \n" + JSON_SPEC + "\n  ", "결과입니다.\n" + JSON_SPEC, "결과입니다.\n```json\n" + JSON_SPEC + "\n```"]) {

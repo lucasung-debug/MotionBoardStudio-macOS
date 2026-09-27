@@ -207,6 +207,37 @@ test("Claude specification literal YAML newlines recover locally without a secon
   assert.ok(!events.some(event => event.payload.phase === "spec_repair"));
 });
 
+test("Claude specification uses the selected effort and records it without changing the model", async t => {
+  const { engine, controls } = await setup(t);
+  const requests = [];
+  controls.chat = async args => { requests.push({ model: args.model, effort: args.effort }); return { ...response(), effort: args.effort }; };
+  const balanced = await engine.invoke("studio:spec", { provider: "claude", topic: "Local balanced fixture" });
+  const maximum = await engine.invoke("studio:spec", { provider: "claude", topic: "Local maximum fixture", claudeEffort: "max" });
+  assert.equal(balanced.ok, true, balanced.error); assert.equal(maximum.ok, true, maximum.error);
+  assert.deepEqual(requests.map(request => request.effort), ["medium", "max"]);
+  assert.equal(requests[0].model, requests[1].model);
+  assert.equal(balanced.entry.reasoningEffort, "medium"); assert.equal(balanced.entry.input.claudeEffort, "medium");
+  assert.equal(maximum.entry.reasoningEffort, "max"); assert.equal(maximum.entry.input.claudeEffort, "max");
+});
+
+test("Claude response timeout is not mislabeled as cancellation or retried, and history survives", async t => {
+  const { engine, controls, store } = await setup(t, { specificationTimeoutMs: 15 });
+  const existing = await createEntry(engine); let calls = 0;
+  controls.chat = async ({ signal }) => {
+    calls++;
+    // Upstream maps its aborted request to CANCELLED; the engine must retain
+    // its own timed-out cause without treating a user cancellation this way.
+    await new Promise(resolve => {
+      const guard = setTimeout(resolve, 2000);
+      signal.addEventListener("abort", () => { clearTimeout(guard); resolve(); }, { once: true });
+    });
+    throw Object.assign(new Error("Provider abort fixture"), { code: "CANCELLED" });
+  };
+  const result = await engine.invoke("studio:spec", { provider: "claude", topic: "Local deadline fixture" });
+  assert.equal(result.ok, false); assert.equal(result.code, "SPEC_RESPONSE_TIMEOUT"); assert.equal(calls, 1);
+  assert.deepEqual((await store.readHistory()).map(entry => entry.id), [existing.id]);
+});
+
 test("a malformed completed Claude response receives one format repair on the same provider and model", async t => {
   const { engine, controls, events, store } = await setup(t);
   const requests = [], original = "```yaml\nproject:\n  title: Offline fixture\n```";

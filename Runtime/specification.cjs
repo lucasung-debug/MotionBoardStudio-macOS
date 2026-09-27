@@ -3,6 +3,12 @@
 // Adapt the app's specification contract without changing the supplied source.
 // Recovery changes serialization only; it never invents a missing value locally.
 const MAX_RESPONSE_CHARACTERS = 200_000;
+const DEFAULT_CLAUDE_EFFORT = "medium";
+
+function claudeOptions(input = {}) {
+  const effort = ["low", "medium", "high", "xhigh", "max"].includes(input.claudeEffort) ? input.claudeEffort : DEFAULT_CLAUDE_EFFORT;
+  return { effort, timeoutMs: ["xhigh", "max"].includes(effort) ? 900_000 : effort === "high" ? 600_000 : 300_000 };
+}
 
 function directive(mode = "full") {
   const fields = mode === "image_only" ? "title, concept, image_prompt" : "title, concept, yaml, image_prompt";
@@ -108,4 +114,4 @@ function responseDiagnostics(response) {
     endsWithObject: compact.endsWith("}"), stringControlCharacters: escapeStringControls(text).changes };
 }
 
-module.exports = { directive, instructionsForSpecification, parseSpecificationResponse, repairMessage, responseDiagnostics };
+module.exports = { DEFAULT_CLAUDE_EFFORT, claudeOptions, directive, instructionsForSpecification, parseSpecificationResponse, repairMessage, responseDiagnostics };
