@@ -10,6 +10,7 @@ const crypto = require("node:crypto");
 const { createStore } = require("./store.cjs");
 const { createRenderer } = require("./render.cjs");
 const { createImageVideoService } = require("./image-video.cjs");
+const specification = require("./specification.cjs");
 
 async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {}, authServices, testProviders = {} }) {
   if (!path.isAbsolute(sourceRoot || "") || !path.isAbsolute(userData || "")) throw new Error("Absolute source and data directories are required.");
@@ -133,33 +134,53 @@ async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {},
       report({ phase: "prepare", message: `${providerName(provider)} 로그인과 가이드를 확인하는 중…` });
       const guide = prompt.loadGuide(promptsDir);
       const contractMode = mode === "image_only" ? "image_only" : "full";
-      const instructions = prompt.buildInstructions({ guide: guide.content, mode: contractMode });
+      const instructions = specification.instructionsForSpecification(prompt.buildInstructions({ guide: guide.content, mode: contractMode }), contractMode);
       const userText = prompt.buildUserMessage({ ...input, mode });
       const onDelta = delta => report({ phase: "stream", kind: delta.kind, text: delta.text, message: delta.kind === "status" ? delta.text : undefined });
-      let result;
-      if (provider === "claude") {
-        const { token } = rememberAuth(await claudeAuth.getAuth()); checkAbort(signal);
-        report({ phase: "request", message: `${claude.DEFAULT_MODEL}에 제작 명세를 요청했습니다…` });
-        result = await claude.chat({ token, instructions, userText, model: claude.DEFAULT_MODEL, effort: claude.DEFAULT_EFFORT,
-          signal, onDelta, fetchImpl: testProviders.fetchImpl });
-        result = { ...result, requestedModel: claude.DEFAULT_MODEL, reasoningEffort: result.effort, fallbackReason: "" };
-      } else {
+      const requestSpecification = async (text, { repair = false } = {}) => {
+        if (provider === "claude") {
+          const { token } = rememberAuth(await claudeAuth.getAuth()); checkAbort(signal);
+          if (!repair) report({ phase: "request", message: `${claude.DEFAULT_MODEL}에 제작 명세를 요청했습니다…` });
+          const response = await claude.chat({ token, instructions, userText: text, finalDirective: specification.directive(contractMode),
+            model: claude.DEFAULT_MODEL, effort: claude.DEFAULT_EFFORT, signal, onDelta, fetchImpl: testProviders.fetchImpl });
+          return { ...response, requestedModel: claude.DEFAULT_MODEL, reasoningEffort: response.effort, fallbackReason: "" };
+        }
         const { accessToken, accountId } = rememberAuth(await auth.getAuth()); checkAbort(signal);
-        report({ phase: "request", message: `${codex.DEFAULT_MODEL}에 제작 명세를 요청했습니다…` });
-        result = await codex.chat({ accessToken, accountId, instructions,
-          input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+        if (!repair) report({ phase: "request", message: `${codex.DEFAULT_MODEL}에 제작 명세를 요청했습니다…` });
+        return codex.chat({ accessToken, accountId, instructions,
+          input: [{ type: "message", role: "user", content: [{ type: "input_text", text: text }] }],
           model: codex.DEFAULT_MODEL, reasoningEffort: codex.DEFAULT_REASONING, signal, onDelta, fetchImpl: testProviders.fetchImpl });
-      }
+      };
+      let result = await requestSpecification(userText);
       checkAbort(signal);
       report({ phase: "parse", message: "응답을 해석해 제작 명세를 정리하는 중…" });
-      let parsed;
-      try { parsed = prompt.normalizeResult(codex.extractJson(result.content), { mode: contractMode }); }
-      catch (error) {
-        await store.atomicWrite(path.join(store.baseDir, "failed-response-" + run.id + ".json"), JSON.stringify({
-          provider, model: redact(result.model || ""), message: userMessage(error), responseCharacters: String(result.content || "").length
+      const parse = reply => specification.parseSpecificationResponse(reply, { mode: contractMode, normalizeResult: prompt.normalizeResult });
+      const recordFailure = async (error, reply, attempt) => {
+        await store.atomicWrite(path.join(store.baseDir, `failed-response-${run.id}-${attempt}.json`), JSON.stringify({
+          provider, model: redact(reply.model || ""), message: userMessage(error), code: error.code || "", attempt,
+          ...specification.responseDiagnostics(reply)
         }, null, 2), { signal }).catch(() => {});
-        throw error;
+      };
+      let decoded;
+      try { decoded = parse(result); }
+      catch (error) {
+        await recordFailure(error, result, 1);
+        checkAbort(signal);
+        if (!error.repairable) throw error;
+        report({ phase: "spec_repair", message: `${providerName(provider)}의 응답 형식을 한 번 정리하는 중… 기존 내용과 검증 한계를 유지합니다.` });
+        // Same selected provider, model and app account. Only malformed completed
+        // specifications get one repair; auth, transport and truncation do not.
+        result = await requestSpecification(specification.repairMessage(userText, result, contractMode), { repair: true });
+        checkAbort(signal);
+        try { decoded = parse(result); }
+        catch (repairError) {
+          await recordFailure(repairError, result, 2);
+          if (repairError.code === "SPEC_FORMAT_INVALID") repairError.message = `${providerName(provider)} 응답 형식을 한 번 보정했지만 완성된 제작 명세 JSON을 받지 못했습니다. 입력은 유지되며 불완전한 결과는 저장하지 않았습니다.`;
+          throw repairError;
+        }
       }
+      if (decoded.locallyRepaired) report({ phase: "spec_repaired", message: "응답의 줄바꿈 표기를 정리했습니다. 제작 내용은 그대로 유지했습니다." });
+      const parsed = decoded.parsed;
       const entry = { id: crypto.randomUUID(), createdAt: Date.now(), updatedAt: Date.now(), input: { ...input, mode }, provider,
         title: parsed.title, concept: parsed.concept, yaml: parsed.yaml, imagePrompt: parsed.imagePrompt, notes: parsed.notes,
         model: result.model, requestedModel: result.requestedModel, reasoningEffort: result.reasoningEffort,

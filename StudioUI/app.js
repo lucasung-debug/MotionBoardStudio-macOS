@@ -13,6 +13,8 @@ const PHASE_LABELS = {
   request: '요청',
   stream: '수신',
   parse: '해석',
+  spec_repair: '명세 형식 보정',
+  spec_repaired: '명세 형식 복구',
   spec_done: '명세 완료',
   image_prepare: '이미지 준비',
   image_stream: '이미지',
@@ -1295,7 +1297,7 @@ async function init() {
       setStatus(payload.message);
       return;
     }
-    if (['compose', 'repair', 'review', 'direct', 'script_fix'].includes(payload.phase)) streamedChars = 0;
+    if (['compose', 'repair', 'review', 'direct', 'script_fix', 'spec_repair'].includes(payload.phase)) streamedChars = 0;
     if (payload.message) {
       const label = PHASE_LABELS[payload.phase] || payload.phase;
       appendLog(`\n[${label}] ${payload.message}\n`);

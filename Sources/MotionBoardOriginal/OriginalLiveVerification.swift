@@ -7,6 +7,7 @@ import Foundation
 @MainActor
 enum OriginalLiveVerification {
     static func run(arguments: [String]) async -> Int32 {
+        if arguments.contains("--spec-only") { return await runSpecification(arguments: arguments) }
         let runtime = RuntimeBridge()
         var actions: NativeActions?
         var destination: URL?
@@ -67,6 +68,67 @@ enum OriginalLiveVerification {
             evidence["error"] = .string(error.localizedDescription)
             if let destination { try? save(evidence, to: destination) }
             fputs("Live verification failed: \(error.localizedDescription)\n", stderr)
+            return 1
+        }
+    }
+
+    /// A bounded regression check for specification failures. Uses only the
+    /// selected app account and writes generated data to a new isolated folder.
+    private static func runSpecification(arguments: [String]) async -> Int32 {
+        let runtime = RuntimeBridge()
+        var actions: NativeActions?
+        var destination: URL?
+        var evidence: [String: JSONValue] = ["liveProviders": .bool(true), "specificationOnly": .bool(true), "ok": .bool(false)]
+        do {
+            guard let outputIndex = arguments.firstIndex(of: "--output"), outputIndex + 1 < arguments.count,
+                  let inputIndex = arguments.firstIndex(of: "--input"), inputIndex + 1 < arguments.count else {
+                throw StudioError("Specification verification requires --input <JSON file> and --output <new directory>.")
+            }
+            let output = URL(fileURLWithPath: arguments[outputIndex + 1], isDirectory: true).standardizedFileURL
+            guard !FileManager.default.fileExists(atPath: output.path) else { throw StudioError("Live verification output already exists.") }
+            let input = try JSONDecoder().decode([String: JSONValue].self, from: Data(contentsOf: URL(fileURLWithPath: arguments[inputIndex + 1])))
+            guard let provider = input["provider"]?.stringValue, ["claude", "chatgpt"].contains(provider),
+                  input["topic"]?.stringValue?.isEmpty == false else { throw StudioError("Input must name a provider and topic.") }
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            destination = output
+            let native = NativeActions(userData: output)
+            actions = native
+            runtime.nativeCall = { method, params in try await native.handle(method: method, params: params) }
+            var phases: [String] = [], previousPhase = ""
+            runtime.onEvent = { event, payload in
+                guard event == "studio:progress", let phase = payload["phase"].stringValue, phase != previousPhase else { return }
+                previousPhase = phase; phases.append(phase)
+                print("Specification verification: \(phase)"); fflush(stdout)
+            }
+            try await runtime.start(userData: output)
+            let status = try await requireOK(runtime.invoke(provider == "claude" ? "studio:claudeStatus" : "studio:authStatus"))
+            guard status["status"]["loggedIn"].boolValue == true else { throw StudioError("선택한 서비스에 먼저 앱에서 로그인해 주세요.") }
+            evidence["provider"] = .string(provider)
+            let result = try await runtime.invoke("studio:spec", params: .object(input))
+            evidence["phases"] = .array(phases.map(JSONValue.string))
+            _ = try requireOK(result)
+            let entry = result["entry"]
+            guard let id = entry["id"].stringValue, entry["imagePrompt"].stringValue?.isEmpty == false,
+                  input["mode"]?.stringValue == "image_only" || entry["yaml"].stringValue?.isEmpty == false else {
+                throw StudioError("A complete specification was not returned.")
+            }
+            let reopened = try await requireOK(runtime.invoke("studio:historyGet", params: .object(["id": .string(id)])))
+            guard reopened["entry"]["yaml"] == entry["yaml"] else { throw StudioError("Specification history verification failed.") }
+            evidence["entryID"] = .string(id)
+            evidence["model"] = entry["model"]
+            evidence["yamlCharacters"] = .number(Double(entry["yaml"].stringValue?.count ?? 0))
+            evidence["imagePromptCharacters"] = .number(Double(entry["imagePrompt"].stringValue?.count ?? 0))
+            evidence["imageGenerated"] = .bool(false); evidence["videoGenerated"] = .bool(false)
+            evidence["historyRoundTrip"] = .bool(true); evidence["ok"] = .bool(true)
+            try save(evidence, to: output)
+            native.renderer.closeAll(); runtime.stop()
+            print("PASS: live specification parsed and stored; no image or video generation. Artifacts: \(output.path)")
+            return 0
+        } catch {
+            actions?.renderer.closeAll(); runtime.stop()
+            evidence["error"] = .string(error.localizedDescription)
+            if let destination { try? save(evidence, to: destination) }
+            fputs("Specification verification failed: \(error.localizedDescription)\n", stderr)
             return 1
         }
     }

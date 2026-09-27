@@ -190,6 +190,100 @@ test("atomic history transactions retain concurrent additions and patches", asyn
   assert.equal(entry.imagePath, "fixture.png"); assert.equal(entry.videoPath, "fixture.mp4");
 });
 
+test("Claude specification literal YAML newlines recover locally without a second provider call", async t => {
+  const { engine, controls, events } = await setup(t);
+  let calls = 0;
+  controls.chat = async args => {
+    calls++;
+    assert.equal(args.token, "offline-fixture-only");
+    assert.match(args.finalDirective, /\\n/);
+    assert.doesNotMatch(args.instructions, /실제 줄바꿈이 있는 문자열/);
+    return { ...response(), content: JSON.stringify(SPEC).replace(/\\n/g, "\n"), stopReason: "end_turn" };
+  };
+  const result = await engine.invoke("studio:spec", { provider: "claude", topic: "Local YAML recovery fixture", mode: "full" });
+  assert.equal(result.ok, true, result.error); assert.equal(calls, 1);
+  assert.equal(result.entry.yaml, SPEC.yaml);
+  assert.ok(events.some(event => event.payload.phase === "spec_repaired"));
+  assert.ok(!events.some(event => event.payload.phase === "spec_repair"));
+});
+
+test("a malformed completed Claude response receives one format repair on the same provider and model", async t => {
+  const { engine, controls, events, store } = await setup(t);
+  const requests = [], original = "```yaml\nproject:\n  title: Offline fixture\n```";
+  controls.chat = async args => {
+    requests.push(args);
+    return requests.length === 1 ? { content: original, model: "offline-test", stopReason: "end_turn" } : { ...response(), stopReason: "end_turn" };
+  };
+  const result = await engine.invoke("studio:spec", { provider: "claude", topic: "Local repair fixture", mode: "full" });
+  assert.equal(result.ok, true, result.error); assert.equal(requests.length, 2);
+  assert.equal(requests[0].model, requests[1].model);
+  assert.ok(requests.every(request => request.token === "offline-fixture-only" && !request.accessToken));
+  assert.match(requests[1].userText, /previous_response/);
+  assert.match(requests[1].userText, /사실의 불확실성과 검증 한계를 유지/);
+  assert.ok(events.some(event => event.payload.phase === "spec_repair"));
+  assert.equal((await store.readHistory()).length, 1);
+  assert.equal(result.entry.yaml, SPEC.yaml);
+});
+
+test("failed format recovery stops after two calls, preserves history and stores only safe diagnostics", async t => {
+  const { engine, controls, store } = await setup(t);
+  const existing = await createEntry(engine); let calls = 0;
+  controls.chat = async () => {
+    calls++;
+    return { content: "PRIVATE_RESPONSE_FOR_TEST "+"offline-fixture-only", model: "offline-test", stopReason: "end_turn" };
+  };
+  const result = await engine.invoke("studio:spec", { provider: "claude", topic: "Local malformed fixture" });
+  assert.equal(result.ok, false); assert.equal(result.code, "SPEC_FORMAT_INVALID");
+  assert.match(result.error, /한 번 보정/); assert.equal(calls, 2);
+  assert.deepEqual((await store.readHistory()).map(entry => entry.id), [existing.id]);
+  const files = (await fs.readdir(store.baseDir)).filter(file => file.startsWith("failed-response-"));
+  assert.equal(files.length, 2);
+  for (const name of files) {
+    const data = await fs.readFile(path.join(store.baseDir, name), "utf8");
+    assert.doesNotMatch(data, /PRIVATE_RESPONSE_FOR_TEST|offline-fixture-only/);
+    assert.equal(JSON.parse(data).stopReason, "end_turn"); assert.ok(JSON.parse(data).responseCharacters > 0);
+  }
+});
+
+test("truncation, tool turns and authentication errors never launch a format retry", async t => {
+  for (const code of ["max_tokens", "model_context_window_exceeded", "pause_turn", "tool_use", "refusal", "LLM_AUTH_REQUIRED"]) {
+    await t.test(code, async t => {
+      const { engine, controls, store } = await setup(t); let calls = 0;
+      controls.chat = async () => {
+        calls++;
+        if (code === "LLM_AUTH_REQUIRED") throw Object.assign(new Error("Fixture authentication rejected"), { code });
+        return { ...response(), stopReason: code };
+      };
+      const result = await engine.invoke("studio:spec", { provider: "claude", topic: "Local terminal-state fixture" });
+      assert.equal(result.ok, false); assert.equal(calls, 1); assert.equal((await store.readHistory()).length, 0);
+      assert.ok(["SPEC_OUTPUT_TRUNCATED", "SPEC_RESPONSE_INCOMPLETE", "LLM_AUTH_REQUIRED"].includes(result.code));
+    });
+  }
+});
+
+test("cancellation while a format repair is pending rejects its late response and creates no entry", async t => {
+  const { engine, controls, store } = await setup(t), started = deferred(), finish = deferred();
+  let calls = 0;
+  controls.chat = async () => {
+    if (++calls === 1) return { content: "Fixture response with no JSON", stopReason: "end_turn" };
+    started.resolve(); await finish.promise; return response();
+  };
+  const pending = engine.invoke("studio:spec", { provider: "claude", topic: "Local cancellation fixture" });
+  await started.promise; await engine.invoke("studio:cancel"); finish.resolve();
+  assert.equal((await pending).code, "CANCELLED"); assert.equal(calls, 2); assert.equal((await store.readHistory()).length, 0);
+});
+
+test("image-only Claude specifications receive a mode-specific final directive", async t => {
+  const { engine, controls } = await setup(t);
+  controls.chat = async args => {
+    assert.match(args.finalDirective, /yaml은 생략/);
+    assert.doesNotMatch(args.finalDirective, /YAML과 이미지 지시문 전체/);
+    return { content: JSON.stringify({ title: "Image fixture", concept: "Unverified facts remain unverified.", image_prompt: "Complete fixture image instruction" }), stopReason: "end_turn" };
+  };
+  const result = await engine.invoke("studio:spec", { provider: "claude", topic: "Local image fixture", mode: "image_only" });
+  assert.equal(result.ok, true, result.error); assert.equal(result.entry.yaml, "");
+});
+
 test("provider diagnostics and progress never expose tokens or raw HTTP response bodies", async t => {
   const { engine, controls, events } = await setup(t);
   controls.chat = async ({ accessToken, onDelta }) => {
