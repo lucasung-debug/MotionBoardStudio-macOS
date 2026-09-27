@@ -81,8 +81,8 @@ final class StudioCoordinator: NSObject, ObservableObject, WKScriptMessageHandle
     private var starting = false
     private var events: [(String, JSONValue)] = []
     private var loaded = false
-    private let rendererRoot = StudioPaths.sourceRoot.appendingPathComponent("renderer", isDirectory: true)
-    private let methods: Set<String> = ["env", "guide", "authStatus", "authLogin", "authLogout", "claudeStatus", "claudeLoginStart", "claudeLoginComplete", "claudeLoginCancel", "claudeLogout", "spec", "board", "video", "pickMusic", "installFfmpeg", "videoSaveAs", "videoReveal", "cancel", "history", "historyGet", "historyRemove", "imageSaveAs", "imageImport", "reveal", "openDataDir", "openExternal"]
+    private let rendererRoot = StudioPaths.uiRoot
+    private let methods: Set<String> = ["env", "guide", "authStatus", "authLogin", "authLogout", "claudeStatus", "claudeLoginStart", "claudeLoginComplete", "claudeLoginCancel", "claudeLogout", "spec", "board", "video", "pickMusic", "installFfmpeg", "videoSaveAs", "videoReveal", "cancel", "history", "historyGet", "historyRemove", "imageSaveAs", "imageImport", "reveal", "openDataDir", "openExternal", "imageVideoProviders", "imageVideoConfigure", "imageVideoDisconnect", "imageVideoPrepare", "imageVideoSavePlan", "imageVideoGenerate", "imageVideoRefresh", "imageVideoRecover", "imageVideoImportClip", "imageVideoExport"]
 
     init(dataRoot: URL = StudioPaths.userData, verification: Bool = false) {
         self.dataRoot = dataRoot; self.verification = verification
@@ -150,7 +150,7 @@ final class StudioCoordinator: NSObject, ObservableObject, WKScriptMessageHandle
               method.hasPrefix("studio:"), methods.contains(String(method.dropFirst(7))) else {
             replyHandler(["ok": false, "error": "허용되지 않은 앱 요청입니다."], nil); return
         }
-        let isJob = ["studio:spec", "studio:board", "studio:video"].contains(method)
+        let isJob = ["studio:spec", "studio:board", "studio:video", "studio:imageVideoPrepare", "studio:imageVideoGenerate", "studio:imageVideoRefresh", "studio:imageVideoRecover", "studio:imageVideoImportClip", "studio:imageVideoExport"].contains(method)
         if isJob { busy = true }
         Task { @MainActor in
             defer { if isJob { busy = false } }

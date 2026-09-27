@@ -16,7 +16,7 @@ let package = Package(
             path: ".",
             exclude: [".git", ".gitignore", ".local", "reference", "dist", "docs", "examples", "preview", "scripts", "Tests", "Sources/MotionBoardCore", "Sources/MotionBoardStudio", "README.md", "LICENSE"],
             sources: ["Sources/MotionBoardOriginal"],
-            resources: [.copy("upstream/MotionBoardStudio-0.3.2"), .copy("Runtime")]
+            resources: [.copy("upstream/MotionBoardStudio-0.3.2"), .copy("Runtime"), .copy("StudioUI")]
         ),
         .executableTarget(
             name: "MotionBoardStudio",

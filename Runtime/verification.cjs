@@ -8,6 +8,8 @@ const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const { createRenderer } = require('./render.cjs');
+const { createStore } = require('./store.cjs');
+const { createImageVideoMedia } = require('./image-video-media.cjs');
 const requireOK = result => { if (!result?.ok) throw new Error(result?.error || 'Operation failed.'); return result; };
 
 function fixturePNG() {
@@ -93,6 +95,27 @@ async function createVerification({sourceRoot, userData, nativeCall}) {
     const visual=media.streams.find(x=>x.codec_type==='video'), sound=media.streams.find(x=>x.codec_type==='audio');
     if (visual?.codec_name!=='h264'||sound?.codec_name!=='aac'||Number(visual.nb_frames)!==video.videoMeta.frames) throw new Error('MP4 codec, audio, or frame-count verification failed.');
 
+    // Seed imported fixture clips only in this isolated CLI data root. The
+    // production prepare/save/export handlers and real FFmpeg remain in use;
+    // no video service, Keychain credential or paid request is involved.
+    const prepared=requireOK(await engine.invoke('studio:imageVideoPrepare',{id:entry.id})).entry;
+    if(prepared.imageVideo.shots.length!==16 || prepared.imageVideo.shots.filter(shot=>shot.enabled).length!==12) throw new Error('Board scene preparation failed.');
+    requireOK(await engine.invoke('studio:imageVideoSavePlan',{id:entry.id,...prepared.imageVideo,
+      shots:prepared.imageVideo.shots.map((shot,index)=>({...shot,enabled:index<2,duration:1}))}));
+    const fixtureStore=createStore(userData), saved=(await fixtureStore.readHistory()).find(item=>item.id===entry.id);
+    const clipProbe=await createImageVideoMedia({sourceRoot}).probeClip(videoPath);
+    for(const shot of saved.imageVideo.shots.filter(shot=>shot.enabled)) {
+      const clipPath=path.join(fixtureStore.videoDirFor(entry.id),'image-video','verification-imports',shot.id+'.mp4');
+      await fs.mkdir(path.dirname(clipPath),{recursive:true}); await fs.copyFile(videoPath,clipPath);
+      Object.assign(shot,{clipPath,clipMeta:clipProbe,status:'succeeded',imported:true});
+    }
+    await fixtureStore.updateEntry(entry.id,{imageVideo:saved.imageVideo});
+    const imageVideo=requireOK(await engine.invoke('studio:imageVideoExport',{id:entry.id,options:{aspectRatio:'16:9',quality:'draft',musicSource:'none'}})).entry;
+    const imageVideoPath=await engine.resolveMedia(imageVideo.imageVideo.output.videoUrl), imageProbe=probe(imageVideoPath);
+    const imageStream=imageProbe.streams.find(item=>item.codec_type==='video');
+    if(!imageVideo.hasImageVideo || imageVideo.videoUrl!==video.videoUrl || imageVideo.imageVideo.output.videoUrl===video.videoUrl
+      || imageStream.codec_name!=='h264' || Math.abs(Number(imageProbe.format.duration)-2)>0.1) throw new Error('Separate image-video export failed.');
+
     const renderer=createRenderer({sourceRoot,nativeCall});
     const ratioChecks=[];
     const sizes = fullSize ? [['1:1',1440,1440],['16:9',1920,1080],['9:16',1080,1920]] : [['1:1',640,640],['16:9',960,540],['9:16',540,960]];
@@ -128,6 +151,8 @@ async function createVerification({sourceRoot, userData, nativeCall}) {
       runtime:{node:process.execPath,ffmpeg:env.ffmpeg.ffmpeg,ffprobe,h264Encoder:process.env.MOTION_BOARD_H264_ENCODER||'libx264'},
       phases,originalWorkflow:true,historyRoundTrip:true,boardAttachment:true,musicAnalysisAndMixing:true,
       video:{width:visual.width,height:visual.height,fps:video.videoMeta.fps,frames:Number(visual.nb_frames),seconds:Number(media.format.duration),audio:sound.codec_name,bpm:video.videoMeta.bpm},
+      imageVideo:{sceneCount:16,initialSelected:12,exportedScenes:2,importedClipsAreFixtures:true,realProviderGenerationTested:false,
+        width:imageStream.width,height:imageStream.height,seconds:Number(imageProbe.format.duration),motionOutputPreserved:true},
       ratios:ratioChecks,freeCode:{frames:final.frames,fps:final.fps,subframes:final.subframes},cancellationPreservesExistingVideo:true};
     await fs.writeFile(path.join(output,'receipt.json'),JSON.stringify(receipt,null,2)+'\n');
     return {...receipt,outputDirectory:output};

@@ -9,6 +9,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const { createStore } = require("./store.cjs");
 const { createRenderer } = require("./render.cjs");
+const { createImageVideoService } = require("./image-video.cjs");
 
 async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {}, authServices, testProviders = {} }) {
   if (!path.isAbsolute(sourceRoot || "") || !path.isAbsolute(userData || "")) throw new Error("Absolute source and data directories are required.");
@@ -20,17 +21,17 @@ async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {},
     return result.replace(/\bBearer\s+[^\s,;"'<>]+/gi, "Bearer [redacted]")
       .replace(/\beyJ[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]*){0,2}/g, "[redacted]")
       .replace(/\bsk-[A-Za-z0-9_-]{12,}/g, "[redacted]")
-      .replace(/((?:access[_-]?token|refresh[_-]?token|id[_-]?token|authorization|api[_-]?key)["']?\s*[:=]\s*["']?)[^\s,"'<>}]+/gi, "$1[redacted]");
+      .replace(/((?:access[_-]?token|refresh[_-]?token|id[_-]?token|authorization|api[_-]?key|access[_-]?key|secret[_-]?key)["']?\s*[:=]\s*["']?)[^\s,"'<>}]+/gi, "$1[redacted]");
   }
   function publicValue(value) {
     if (typeof value === "string") return redact(value);
     if (Array.isArray(value)) return value.map(publicValue);
     if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
-      /^(access[_-]?token|refresh[_-]?token|id[_-]?token|authorization|api[_-]?key|client[_-]?secret)$/i.test(key) ? "[redacted]" : publicValue(item)]));
+      /^(access[_-]?token|refresh[_-]?token|id[_-]?token|authorization|api[_-]?key|client[_-]?secret|access[_-]?key|secret[_-]?key)$/i.test(key) ? "[redacted]" : publicValue(item)]));
     return value;
   }
   function rememberAuth(value) {
-    for (const key of ["accessToken", "token", "refreshToken", "idToken"]) {
+    for (const key of ["accessToken", "token", "refreshToken", "idToken", "apiKey", "accessKey", "secretKey"]) {
       if (typeof value?.[key] === "string" && value[key].length >= 8) secrets.add(value[key]);
     }
     return value;
@@ -87,12 +88,13 @@ async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {},
       hasVideo: Boolean(entry.videoPath && fs.existsSync(entry.videoPath)),
       videoUrl: store.videoUrlFor(entry.videoPath), posterUrl: store.videoUrlFor(entry.posterPath),
       videoError: entry.videoError || "", videoModel: entry.videoModel || "", videoProvider: entry.videoProvider || "",
-      videoMeta: entry.videoMeta || null
+      videoMeta: entry.videoMeta || null,
+      hasImageVideo: Boolean(entry.imageVideo?.output?.videoPath && fs.existsSync(entry.imageVideo.output.videoPath))
     };
   }
   function publicEntry(entry) {
     return { ...summary(entry), input: entry.input, concept: entry.concept, yaml: entry.yaml,
-      imagePrompt: entry.imagePrompt, notes: entry.notes || [] };
+      imagePrompt: entry.imagePrompt, notes: entry.notes || [], imageVideo: imageVideo.publicPlan(entry.imageVideo) };
   }
   async function entryFor(id) {
     const entry = (await store.readHistory()).find(item => item.id === id);
@@ -109,6 +111,20 @@ async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {},
   function protectActive(id) {
     if (currentRun && (!id || currentRun.entryId === id)) throw new Error("이 기록을 생성 중입니다. 완료되거나 취소된 뒤에 다시 시도해 주세요.");
   }
+
+  const imageVideo = createImageVideoService({ sourceRoot, store, nativeCall, getEntry: entryFor, rememberAuth, errorMessage: userMessage, testProviders });
+  const imageOperation = action => input => withRun("image-video", input.id, async (run, report) => {
+    try {
+      const entry = await action(input, { signal: run.controller.signal, report });
+      run.committed = true;
+      return { ok: true, canceled: Boolean(entry.operationCanceled), entry: publicEntry(entry) };
+    } catch (error) {
+      // Earlier shots may already have been accepted or downloaded. Return the
+      // saved state with the error so the UI can resume without guessing/replay.
+      const entry = await entryFor(input.id).catch(() => null);
+      return { ...fail(error), ...(entry ? { entry: publicEntry(entry) } : {}) };
+    }
+  });
 
   async function runSpec(input) {
     return withRun("spec", null, async (run, report) => {
@@ -240,11 +256,11 @@ async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {},
     });
   }
 
-  async function saveAs(entry, kind) {
-    const source = kind === "video" ? entry.videoPath : entry.imagePath;
+  async function saveAs(entry, kind, videoKind) {
+    const source = kind === "video" ? (videoKind === "image_video" ? entry.imageVideo?.output?.videoPath : entry.videoPath) : entry.imagePath;
     if (!source || !fs.existsSync(source)) throw new Error("저장할 파일이 없습니다.");
     const extension = path.extname(source).slice(1) || (kind === "video" ? "mp4" : "png");
-    const label = kind === "video" ? "영상" : "디자인보드";
+    const label = kind === "video" ? (videoKind === "image_video" ? "이미지영상" : "영상") : "디자인보드";
     const result = await nativeCall("dialog.save", { options: { title: label + " 저장",
       defaultPath: path.join(os.homedir(), "Downloads", `${prompt.sanitizeFileName(entry.title, "motion")}_${label}.${extension}`),
       filters: [{ name: extension.toUpperCase(), extensions: [extension] }] } });
@@ -294,15 +310,26 @@ async function createEngine({ sourceRoot, userData, nativeCall, emit = () => {},
     "studio:spec": async input => ({ ok: true, entry: publicEntry(await runSpec(input)) }),
     "studio:board": async input => ({ ok: true, entry: publicEntry(await runBoard(input)) }),
     "studio:video": async input => ({ ok: true, entry: publicEntry(await runVideo(input)) }),
+    "studio:imageVideoProviders": imageVideo.providers,
+    "studio:imageVideoConfigure": input => { protectActive(); return imageVideo.configure(input); },
+    "studio:imageVideoDisconnect": input => { protectActive(); return imageVideo.disconnect(input); },
+    "studio:imageVideoPrepare": imageOperation(imageVideo.prepare),
+    "studio:imageVideoSavePlan": imageOperation(imageVideo.savePlan),
+    "studio:imageVideoGenerate": imageOperation(imageVideo.generate),
+    "studio:imageVideoRefresh": imageOperation(imageVideo.refresh),
+    "studio:imageVideoRecover": imageOperation(imageVideo.recover),
+    "studio:imageVideoImportClip": imageOperation(imageVideo.importClip),
+    "studio:imageVideoExport": imageOperation(imageVideo.exportVideo),
     "studio:installFfmpeg": installFfmpeg,
     "studio:pickMusic": async () => {
       const result = await nativeCall("dialog.open", { options: { title: "영상에 쓸 음악 파일 선택", properties: ["openFile"],
         filters: [{ name: "오디오", extensions: ["mp3", "wav", "m4a", "aac", "flac", "ogg"] }] } });
       return result.canceled || !result.filePaths?.[0] ? { ok: true, canceled: true } : { ok: true, file: result.filePaths[0] };
     },
-    "studio:videoSaveAs": async ({ id }) => saveAs(await entryFor(id), "video"),
-    "studio:videoReveal": async ({ id, which }) => {
-      const entry = await entryFor(id), file = which === "code" ? entry.compositionPath : entry.videoPath;
+    "studio:videoSaveAs": async ({ id, kind }) => saveAs(await entryFor(id), "video", kind),
+    "studio:videoReveal": async ({ id, which, kind }) => {
+      const entry = await entryFor(id), result = kind === "image_video" ? entry.imageVideo?.output : entry;
+      const file = which === "code" ? result?.compositionPath : result?.videoPath;
       if (!file || !fs.existsSync(file)) throw new Error("표시할 파일이 없습니다.");
       await nativeCall("shell.reveal", { path: file }); return { ok: true };
     },

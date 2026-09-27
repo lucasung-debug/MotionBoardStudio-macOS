@@ -5,14 +5,16 @@ import ImageIO
 import UniformTypeIdentifiers
 @preconcurrency import WebKit
 
-/// Exercises the preserved frontend with the production native bridge. Its
+/// Exercises the Mac frontend and preserved motion flow with the native bridge. Its
 /// coordinator installs only the CLI verification providers and transient data.
 @MainActor
 enum OriginalUIVerification {
     static func run(dataRoot: URL, output: URL) async throws -> JSONValue {
         let screenshot = output.appendingPathComponent("native-ui.png")
+        let imageVideoScreenshot = output.appendingPathComponent("native-image-video.png")
         let receiptFile = output.appendingPathComponent("native-ui-receipt.json")
         guard !FileManager.default.fileExists(atPath: screenshot.path),
+              !FileManager.default.fileExists(atPath: imageVideoScreenshot.path),
               !FileManager.default.fileExists(atPath: receiptFile.path) else {
             throw StudioError("Native UI verification artifacts already exist; choose another output directory.")
         }
@@ -52,7 +54,8 @@ enum OriginalUIVerification {
             const expected = ['env','guide','auth.status','auth.login','auth.logout','claude.status','claude.loginStart',
               'claude.loginComplete','claude.loginCancel','claude.logout','spec','board','video','pickMusic','installFfmpeg',
               'videoSaveAs','videoReveal','cancel','history','historyGet','historyRemove','imageSaveAs','imageImport',
-              'reveal','openDataDir','openExternal'];
+              'reveal','openDataDir','openExternal', 'imageVideo.providers','imageVideo.configure','imageVideo.disconnect',
+              'imageVideo.prepare','imageVideo.savePlan','imageVideo.generate','imageVideo.refresh','imageVideo.recover','imageVideo.importClip','imageVideo.export'];
             const flatten = (value, prefix = '') => Object.entries(value).flatMap(([key, item]) => {
               const path = prefix ? `${prefix}.${key}` : key;
               return typeof item === 'function' ? [path] : item && typeof item === 'object' ? flatten(item, path) : [];
@@ -60,7 +63,7 @@ enum OriginalUIVerification {
             const functions = flatten(window.studio);
             const events = functions.filter(name => /^on[A-Z]/.test(name));
             const calls = functions.filter(name => !events.includes(name));
-            if (JSON.stringify(calls.sort()) !== JSON.stringify(expected.sort())) throw new Error('Original 26-method facade mismatch.');
+            if (JSON.stringify(calls.sort()) !== JSON.stringify(expected.sort())) throw new Error('Original and image-video method facade mismatch.');
             if (JSON.stringify(events.sort()) !== JSON.stringify(['onAuth','onClaudeAuth','onProgress'])) throw new Error('Original event facade mismatch.');
             const environment = await window.studio.env();
             const history = await window.studio.history();
@@ -214,7 +217,10 @@ enum OriginalUIVerification {
             return {width:innerWidth,height:innerHeight};
             """)
             let capture = try await saveSnapshot(web, window: window, to: screenshot)
+            let imageVideo = try await verifyImageVideo(web, coordinator: coordinator)
+            let imageVideoCapture = try await saveSnapshot(web, window: window, to: imageVideoScreenshot)
             var limitations: [JSONValue] = [.string("Provider responses and account status were offline fixtures; no real login or AI generation was tested.")]
+            limitations.append(.string("Image-video clips were local copies of the motion fixture; board crops and the separate two-second composition used real media. Subject animation from Grok or Kling was not tested."))
             if playback["allowed"].boolValue != true || playback["advanced"].boolValue != true {
                 limitations.append(.string("Programmatic playback did not advance; metadata, decoding, and seek were verified separately."))
             }
@@ -222,10 +228,11 @@ enum OriginalUIVerification {
                 limitations.append(.string(iframe["limitation"].stringValue ?? "A subframe native request could not be dispatched."))
             }
             let receipt: JSONValue = .object([
-                "ok": .bool(true), "originalFrontend": .bool(true), "productionNativeBridge": .bool(true),
+                "ok": .bool(true), "macFrontend": .bool(true), "originalMotionFlowPreserved": .bool(true), "productionNativeBridge": .bool(true),
                 "nonPersistentWebData": .bool(true), "realProviderLoginTested": .bool(false),
                 "bridge": bridge, "board": board, "forms": forms, "video": video,
                 "playback": playback, "subframe": iframe, "screenshot": capture,
+                "imageVideo": imageVideo, "imageVideoScreenshot": imageVideoCapture,
                 "limitations": .array(limitations)
             ])
             let encoder = JSONEncoder()
@@ -239,6 +246,154 @@ enum OriginalUIVerification {
             }
             throw error
         }
+    }
+
+    private static func verifyImageVideo(_ web: WKWebView, coordinator: StudioCoordinator) async throws -> JSONValue {
+        try await waitFor(web, coordinator: coordinator, label: "image-video fixture and provider catalog", expression: """
+        current?.imageVideo?.shots?.length === 16 && current.imageVideo.output?.videoUrl
+          && imageProviders.some(provider => provider.id === 'grok') && imageProviders.some(provider => provider.id === 'kling')
+        """)
+        return try await javascript(web, body: """
+        const delay = milliseconds => new Promise(resolve => setTimeout(resolve,milliseconds));
+        const until = async (test,label) => {
+          const deadline=Date.now()+20000;
+          while (Date.now()<deadline) { if (test()) return; await delay(50); }
+          throw new Error(`Timed out waiting for ${label}.`);
+        };
+        const radios=[...document.querySelectorAll('input[name="creationMode"]')];
+        if (radios.length!==2 || !radios.some(radio=>radio.value==='motion_graphics') || !radios.some(radio=>radio.value==='image_video'))
+          throw new Error('The two creation choices are missing.');
+        const secretFields=[...document.querySelectorAll('input,textarea')].filter(field=>field.type==='password'
+          || /api.?key|access.?key|secret.?key|api.?token/i.test(`${field.id} ${field.name}`));
+        if (secretFields.length) throw new Error('Video service credential fields must remain outside the web page.');
+        const imageRadio=radios.find(radio=>radio.value==='image_video'), motionRadio=radios.find(radio=>radio.value==='motion_graphics');
+        imageRadio.click();
+        const imageInput=collectInput(), imageCTA=document.getElementById('runBtn').textContent;
+        if (creationMode!=='image_video' || imageInput.withVideo!==false || imageInput.withImage!==true
+          || !document.getElementById('motionVideoOptions').hidden || document.getElementById('imageCreationNote').hidden)
+          throw new Error('Image creation mode did not preserve the separate board-first flow.');
+        motionRadio.click();
+        const motionCTA=document.getElementById('runBtn').textContent;
+        if (creationMode!=='motion_graphics' || document.getElementById('motionVideoOptions').hidden
+          || !document.getElementById('imageCreationNote').hidden || motionCTA===imageCTA)
+          throw new Error('Motion creation mode did not restore its original controls.');
+        imageRadio.click();
+        const panel=document.querySelector('[data-body="image-video"]');
+        if (!panel.classList.contains('active') || getComputedStyle(panel).display==='none'
+          || document.getElementById('imageVideoWorkbench').hidden) throw new Error('The image-video workbench did not open.');
+        const cards=[...document.querySelectorAll('#sceneGrid .scene-card')];
+        const included=cards.map(card=>card.querySelector('.scene-check input[type="checkbox"]')?.checked);
+        if (cards.length!==16 || included.some((checked,index)=>checked!==(index<2))) throw new Error('The 16 board cells or two selected fixtures are incorrect.');
+        if (new Set(current.imageVideo.shots.map(shot=>shot.imageUrl)).size!==16
+          || current.imageVideo.shots.slice(0,2).some(shot=>!shot.imported || shot.status!=='succeeded' || Number(shot.duration)!==1 || !shot.videoUrl))
+          throw new Error('The separate imported clip fixtures were not restored.');
+        const providerSelect=document.getElementById('imageVideoProvider');
+        const providerIDs=[...providerSelect.options].map(option=>option.value);
+        if (!providerIDs.includes('grok') || !providerIDs.includes('kling') || providerSelect.disabled) throw new Error('Grok and Kling provider choices are unavailable.');
+
+        // Observe the actual bridge boundary. The env canary proves that the
+        // observer is active; every other call is blocked during the UI edit.
+        const handler=window.webkit.messageHandlers.studio;
+        const originalPost=handler.postMessage, ownPost=Object.getOwnPropertyDescriptor(handler,'postMessage');
+        const calls=[];
+        let canary=true, providerChange;
+        const observed=function(message) {
+          calls.push(String(message?.method || 'unknown'));
+          if (canary && message?.method==='studio:env') return originalPost.call(handler,message);
+          return Promise.resolve({ok:false,code:'UI_VERIFICATION_NO_REQUEST',error:'UI verification blocked an unexpected request.'});
+        };
+        const storedBefore=JSON.stringify(current.imageVideo), originalProvider=imageDraft.provider;
+        const importedBefore=imageDraft.shots.filter(shot=>shot.imported).map(shot=>shot.duration);
+        try {
+          Object.defineProperty(handler,'postMessage',{configurable:true,writable:true,value:observed});
+          const environment=await window.studio.env();
+          if (!environment.ok || calls.length!==1 || calls[0]!=='studio:env') throw new Error('Provider-change bridge observer could not be verified.');
+          canary=false; calls.length=0;
+          const next=providerIDs.find(id=>id!==originalProvider);
+          providerSelect.value=next;
+          providerSelect.dispatchEvent(new Event('change',{bubbles:true}));
+          await delay(250);
+          if (calls.length) throw new Error(`Provider selection dispatched requests: ${calls.join(', ')}.`);
+          if (imageDraft.provider!==next || !imageDraftDirty || JSON.stringify(current.imageVideo)!==storedBefore
+            || !document.getElementById('sceneSaveStatus').textContent.includes('저장하지 않은')) throw new Error('Provider selection did not remain an unsaved local edit.');
+          if (JSON.stringify(imageDraft.shots.filter(shot=>shot.imported).map(shot=>shot.duration))!==JSON.stringify(importedBefore))
+            throw new Error('Provider selection changed imported clip durations.');
+          providerChange={from:originalProvider,to:next,bridgeObserverCanary:true,nativeRequests:0,unsavedLocalEdit:true,importedDurationsPreserved:true};
+        } finally {
+          if (ownPost) Object.defineProperty(handler,'postMessage',ownPost); else delete handler.postMessage;
+          imageDraftDirty=false;
+          renderImageVideo(current);
+        }
+
+        const mediaCheck=async (id,expected) => {
+          const player=document.getElementById(id);
+          await until(()=>{
+            if (player.error) throw new Error(`${id} media error ${player.error.code}: ${player.error.message}`);
+            return player.currentSrc===expected.url && player.readyState>=1 && player.videoWidth>0 && player.videoHeight>0 && Number.isFinite(player.duration) && player.duration>0;
+          },`${id} metadata`);
+          if (!player.currentSrc.startsWith('studio-video://local/') || player.videoWidth!==expected.width || player.videoHeight!==expected.height
+            || Math.abs(player.duration-expected.duration)>Math.max(0.1,2/(expected.fps || 30))) throw new Error(`${id} metadata differs from the stored media.`);
+          player.muted=true;
+          const before=player.currentTime;
+          const play=await Promise.race([
+            Promise.resolve().then(()=>player.play()).then(()=>({allowed:true})).catch(error=>({allowed:false,reason:`${error.name}: ${error.message}`})),
+            delay(3000).then(()=>({allowed:false,reason:'Playback request exceeded 3 seconds.'}))
+          ]);
+          if (play.allowed) await delay(250);
+          const advanced=player.currentTime>before+0.05;
+          player.pause(); player.currentTime=Math.min(0.5,player.duration/2);
+          await until(()=>{
+            if (player.error) throw new Error(`${id} decode error ${player.error.code}.`);
+            return !player.seeking && player.readyState>=2 && Math.abs(player.currentTime-Math.min(0.5,player.duration/2))<0.1;
+          },`${id} decoded frame and seek`);
+          return {loadedMetadata:true,decodedFrameAvailable:true,seekCompleted:true,sourceScheme:new URL(player.currentSrc).protocol,
+            width:player.videoWidth,height:player.videoHeight,duration:player.duration,currentTime:player.currentTime,
+            playback:{...play,advanced,mutedForVerification:true}};
+        };
+        const scenes=[];
+        for (let index=0;index<2;index++) {
+          document.querySelectorAll('#sceneGrid .scene-preview')[index].click();
+          const shot=current.imageVideo.shots[index], source=document.getElementById('sceneSourceImage');
+          await until(()=>source.complete && source.naturalWidth>0 && source.currentSrc===shot.imageUrl,`scene ${index+1} source image`);
+          if (!source.currentSrc.startsWith('studio-image://local/') || Math.min(source.naturalWidth,source.naturalHeight)<512
+            || Math.abs(source.naturalWidth/source.naturalHeight-shot.sourceWidth/shot.sourceHeight)>0.005)
+            throw new Error(`Scene ${index+1} source crop dimensions are incorrect.`);
+          const player=document.getElementById('sceneVideoPlayer');
+          if (player.hidden || player.dataset.src!==shot.videoUrl || Number(document.getElementById('sceneDuration').value)!==1)
+            throw new Error(`Scene ${index+1} did not display its imported one-second selection.`);
+          const clip=await mediaCheck('sceneVideoPlayer',{url:shot.videoUrl,width:current.videoMeta.width,height:current.videoMeta.height,duration:current.videoMeta.T,fps:current.videoMeta.fps});
+          scenes.push({index,imported:true,selectedDuration:1,source:{width:source.naturalWidth,height:source.naturalHeight,sourceScheme:new URL(source.currentSrc).protocol},clip});
+        }
+        const output=current.imageVideo.output, outputPlayer=document.getElementById('imageVideoPlayer'), meta=output.videoMeta;
+        const outputDuration=Number(meta.duration || meta.T || meta.durationSeconds);
+        if (output.videoUrl===current.videoUrl || outputPlayer.dataset.src!==output.videoUrl || document.getElementById('imageVideoOutput').hidden
+          || document.getElementById('saveImageVideoBtn').disabled || document.getElementById('exportImageVideoBtn').disabled
+          || !document.getElementById('generateScenesBtn').disabled || Math.abs(outputDuration-2)>0.1)
+          throw new Error('Separate final image-video output or ready-clip actions are incorrect.');
+        const finalVideo=await mediaCheck('imageVideoPlayer',{url:output.videoUrl,width:meta.width,height:meta.height,duration:outputDuration,fps:meta.fps});
+        if (!document.getElementById('imageVideoMeta').textContent.includes(`${meta.width}×${meta.height}`)) throw new Error('Final image-video dimensions are not displayed.');
+        const legacy=document.getElementById('videoPlayer'), legacyURL=new URL(legacy.currentSrc);
+        legacyURL.search='';
+        if (legacyURL.href!==current.videoUrl)
+          throw new Error('Image-video viewing replaced the original motion video.');
+
+        document.querySelector('#sceneGrid .scene-preview').click();
+        const thumbnails=[...document.querySelectorAll('#sceneGrid .scene-preview img')];
+        thumbnails.forEach(image=>{image.loading='eager';});
+        await until(()=>thumbnails.length===16 && thumbnails.every(image=>image.complete && image.naturalWidth>0),'all 16 board thumbnails');
+        const firstSource=document.getElementById('sceneSourceImage'), firstClip=document.getElementById('sceneVideoPlayer');
+        await until(()=>firstSource.complete && firstSource.naturalWidth>0 && firstSource.currentSrc===current.imageVideo.shots[0].imageUrl
+          && firstClip.currentSrc===current.imageVideo.shots[0].videoUrl && firstClip.readyState>=1,'first scene screenshot media');
+        firstClip.pause(); firstClip.currentTime=Math.min(0.5,firstClip.duration/2);
+        await until(()=>!firstClip.seeking && firstClip.readyState>=2,'first scene screenshot frame');
+        window.scrollTo(0,0);
+        await document.fonts.ready;
+        await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+        return {creationModes:['motion_graphics','image_video'],creationCTAs:{motion:motionCTA,image:imageCTA},secretFields:0,
+          providerIDs,providerChange,sceneCount:16,selectedScenes:2,loadedThumbnails:16,scenes,
+          finalVideo:{...finalVideo,separateFromMotion:true,selectedDuration:2},originalMotionVideoPreserved:true,
+          importedClipsAreFixtures:true,realProviderGenerationTested:false};
+        """, timeout: 90)
     }
 
     private static func waitFor(_ web: WKWebView, coordinator: StudioCoordinator, label: String,

@@ -31,7 +31,7 @@ enum OriginalVerification {
             receipt["nativeUI"] = try await OriginalUIVerification.run(dataRoot: output, output: output)
             let data = try JSONEncoder().encode(JSONValue.object(receipt))
             try data.write(to: output.appendingPathComponent("native-receipt.json"), options: .atomic)
-            print("PASS: original spec, board, music, direction, frame review, video, history, three ratios, free code, 60fps blur, cancellation.")
+            print("PASS: original motion workflow, image-video scene preparation/export, native interface, history, three ratios, free code, 60fps blur, cancellation.")
             print("Artifacts: \(output.path)")
             print("Provider calls were offline fixtures; real account login and generation remain unverified.")
             native.renderer.closeAll(); runtime.stop()
@@ -53,7 +53,7 @@ enum OriginalVerification {
             let output = URL(fileURLWithPath: arguments[outputIndex + 1], isDirectory: true).standardizedFileURL
             guard !FileManager.default.fileExists(atPath: output.path) else { throw StudioError("UI verification output already exists.") }
             _ = try await OriginalUIVerification.run(dataRoot: root, output: output)
-            print("PASS: actual original WebKit interface and native bridge. Artifacts: \(output.path)")
+            print("PASS: actual Mac WebKit interface and native bridge. Artifacts: \(output.path)")
             return 0
         } catch {
             fputs("Original UI verification failed: \(error.localizedDescription)\n", stderr)

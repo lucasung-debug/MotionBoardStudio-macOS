@@ -6,7 +6,7 @@ struct StudioVault {
     init(service: String = "io.github.lucasung-debug.motionboardstudio.accounts") { self.service = service }
 
     private func query(_ account: String) throws -> [CFString: Any] {
-        guard ["chatgpt", "claude"].contains(account) else { throw StudioError("알 수 없는 계정 종류입니다.") }
+        guard ["chatgpt", "claude", "grok-video", "kling-video"].contains(account) else { throw StudioError("알 수 없는 계정 종류입니다.") }
         return [kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecAttrAccount: account]
     }
     func read(_ account: String) throws -> String? {

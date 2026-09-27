@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' studio-image: studio-video: data:; media-src 'self' studio-video:; connect-src 'self'; object-src 'none'; base-uri 'none'">
+  <title>모션보드 스튜디오</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">MB</span>
+      <div class="brand-text">
+        <h1>모션보드 스튜디오</h1>
+        <p>4×4 디자인 보드 · 모션 그래픽 · 이미지 활용 영상</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="badge model-badge" id="modelBadge">gpt-6-astra · 초고추론(xhigh)</span>
+      <span class="badge auth-badge" id="authBadge">로그인 확인 중…</span>
+      <button id="authBtn" class="btn ghost" type="button" disabled>ChatGPT 로그인</button>
+      <span class="badge claude-badge" id="claudeBadge">Claude 확인 중…</span>
+      <button id="claudeAuthBtn" class="btn ghost" type="button" disabled>Claude 로그인</button>
+      <button id="dataDirBtn" class="btn ghost" type="button" title="생성 기록이 저장되는 폴더 열기">기록 폴더</button>
+    </div>
+  </header>
+
+  <div class="claude-login" id="claudeLoginBox" hidden>
+    <span class="claude-login-label">브라우저에서 승인한 뒤 표시되는 <b>코드#state</b> 전체를 붙여넣으세요.</span>
+    <input id="claudeCodeInput" type="text" placeholder="예: AbCd1234...#EfGh5678..." autocomplete="off" spellcheck="false">
+    <button id="claudeCodeSubmit" class="btn primary" type="button">확인</button>
+    <button id="claudeCodeCancel" class="btn ghost" type="button">취소</button>
+  </div>
+
+  <main class="layout">
+    <section class="panel form-panel">
+      <fieldset class="creation-choice">
+        <legend>제작 방식</legend>
+        <label class="creation-option">
+          <input type="radio" name="creationMode" value="motion_graphics" checked data-image-control>
+          <span><strong>모션 그래픽</strong><small>글자와 도형을 음악에 맞춰 연출</small></span>
+        </label>
+        <label class="creation-option">
+          <input type="radio" name="creationMode" value="image_video" data-image-control>
+          <span><strong>이미지 활용 영상</strong><small>보드 속 인물과 사물을 움직이는 장면으로</small></span>
+        </label>
+      </fieldset>
+      <p class="field-hint creation-hint" id="creationHint">명세와 보드의 색·문구를 바탕으로 모션 그래픽을 만듭니다.</p>
+      <h2>주제 입력</h2>
+      <label class="field">
+        <span>주제 <em>*</em></span>
+        <textarea id="topic" rows="2" placeholder="예: 추석 명절" autocomplete="off"></textarea>
+      </label>
+
+      <label class="field">
+        <span>생성 모델 (명세 작성)</span>
+        <select id="provider">
+          <option value="chatgpt" selected>ChatGPT · gpt-6-astra (xhigh)</option>
+          <option value="claude">Claude · claude-opus-5-5 (effort max)</option>
+        </select>
+      </label>
+
+      <div class="field" id="withImageRow" hidden>
+        <span>보드 이미지 (선택)</span>
+        <label class="check"><input type="checkbox" id="withImage"><span>GPT 이미지로 4×4 보드도 생성 (ChatGPT 로그인 필요)</span></label>
+        <p class="field-hint">끄면 이미지 없이 명세만으로 바로 영상을 만듭니다.</p>
+      </div>
+
+      <div class="grid2">
+        <label class="field"><span>분위기</span><input id="mood" type="text" placeholder="예: 차분하고 따뜻하게"></label>
+        <label class="field"><span>스타일</span><input id="style" type="text" placeholder="예: 종이 조형과 매트한 입체감"></label>
+        <label class="field"><span>강조 문구</span><input id="copy" type="text" placeholder="예: 마음이 모이는 날"></label>
+        <label class="field"><span>피할 요소</span><input id="avoid" type="text" placeholder="예: 토끼 캐릭터, 전통문양 도배"></label>
+        <label class="field"><span>화면비</span>
+          <select id="aspect">
+            <option value="1:1" selected>1:1 (정사각)</option>
+            <option value="16:9">16:9 (가로)</option>
+            <option value="9:16">9:16 (세로)</option>
+          </select>
+        </label>
+        <label class="field"><span id="durationLabel">길이 (초)</span><input id="duration" type="number" min="5" max="120" step="1" value="30"></label>
+        <label class="field"><span>데이터 표기</span><input id="dataNote" type="text" placeholder="예: 실제 결과가 아닌 디자인 예시로 표시"></label>
+        <label class="field" id="outputModeField"><span>출력</span>
+          <select id="mode">
+            <option value="full" selected>전체 (명세 + 4×4 보드)</option>
+            <option value="image_only">이미지만</option>
+            <option value="spec_only">프롬프트만 (명세만)</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="field"><span>추가 요청</span><textarea id="extra" rows="2" placeholder="선택 사항 — 이번 시안에만 적용할 요청"></textarea></label>
+
+      <div class="video-box" id="motionVideoOptions">
+        <label class="check video-toggle"><input type="checkbox" id="withVideo" checked><span><b>영상까지 한 번에 생성 (MP4)</b></span></label>
+        <div id="videoOptions">
+          <label class="field"><span>연출 방식</span>
+            <select id="engine">
+              <option value="direct" selected>디자인 엔진 (권장) · 모델은 연출만, 렌더는 앱 엔진</option>
+              <option value="code">자유 코드 (실험) · 모델이 코드를 전부 작성</option>
+            </select>
+          </label>
+          <div class="grid2">
+            <label class="field"><span>음악</span>
+              <select id="musicSource">
+                <option value="mixkit" selected>Mixkit 자동 (무료)</option>
+                <option value="file">내 음악 파일</option>
+                <option value="none">음악 없이 (효과음만)</option>
+              </select>
+            </label>
+            <label class="field"><span>렌더 품질</span>
+              <select id="quality">
+                <option value="final" selected>최종 60fps · 모션 블러</option>
+                <option value="draft">빠른 미리보기 · 30fps</option>
+              </select>
+            </label>
+          </div>
+          <div class="field music-file-row" id="musicFileRow" hidden>
+            <div class="music-file">
+              <button id="pickMusicBtn" class="btn mini" type="button">파일 선택…</button>
+              <span id="musicFileName" class="muted">선택된 파일 없음</span>
+            </div>
+          </div>
+          <label class="check"><input type="checkbox" id="review" checked><span>비트 프레임 자동 점검 후 1회 수정 (품질↑, 시간↑)</span></label>
+          <p class="field-hint" id="ffmpegHint"></p>
+          <button id="installFfmpegBtn" class="btn mini" type="button" hidden>ffmpeg 설치 (1회, 약 100MB)</button>
+        </div>
+      </div>
+
+      <p class="image-creation-note" id="imageCreationNote" hidden>먼저 명세와 보드를 만든 뒤 장면을 선택합니다. Grok·Kling 영상 생성은 별도 버튼에서 시작하며, 외부 서비스 이용료가 발생합니다. 직접 만든 클립도 가져올 수 있습니다.</p>
+
+      <div class="form-actions">
+        <button id="runBtn" class="btn primary" type="button">명세 + 보드 생성</button>
+        <button id="cancelBtn" class="btn danger" type="button" disabled>취소</button>
+      </div>
+
+      <div class="status-box">
+        <div class="status-line">
+          <span class="spinner" id="spinner" hidden></span>
+          <span id="statusText">대기 중</span>
+        </div>
+        <div class="progress" id="progressBar" hidden><div class="progress-fill" id="progressFill"></div></div>
+        <details id="logBox">
+          <summary>진행 로그 · 추론 요약</summary>
+          <pre id="log"></pre>
+        </details>
+      </div>
+
+    </section>
+
+    <section class="panel result-panel">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="concept" type="button">콘셉트</button>
+        <button class="tab" data-tab="yaml" type="button">YAML 명세</button>
+        <button class="tab" data-tab="image" type="button">보드 이미지</button>
+        <button class="tab" data-tab="video" type="button">모션 그래픽</button>
+        <button class="tab" data-tab="image-video" type="button">이미지 영상</button>
+        <button class="tab" data-tab="history" type="button">기록 <span class="count" id="historyCount">0</span></button>
+      </div>
+
+      <div class="tab-body active" data-body="concept">
+        <div class="empty" id="conceptEmpty">아직 생성된 시안이 없습니다. 주제를 입력하고 <b>생성</b> 버튼을 누르세요. 명세 → (보드 이미지) → 영상까지 한 번에 만듭니다.</div>
+        <div id="conceptView" hidden>
+          <h3 class="result-title" id="resultTitle"></h3>
+          <p class="result-meta" id="resultMeta"></p>
+          <p class="concept-text" id="conceptText"></p>
+          <div class="notes" id="notesBox" hidden>
+            <h4>확인 필요 / 한계</h4>
+            <ul id="notesList"></ul>
+          </div>
+          <div class="sub-block">
+            <div class="sub-head">
+              <h4>이미지 지시문 (가이드 8장 구조)</h4>
+              <div class="sub-actions">
+                <button class="btn mini" id="copyPromptBtn" type="button">복사</button>
+              </div>
+            </div>
+            <pre class="prompt-pre" id="promptPre"></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-body" data-body="yaml">
+        <div class="empty" id="yamlEmpty">명세를 생성하면 YAML 제작 명세가 표시됩니다.</div>
+        <div id="yamlView" hidden>
+          <div class="sub-head">
+            <h4>제작 명세 (YAML)</h4>
+            <div class="sub-actions">
+              <button class="btn mini" id="copyYamlBtn" type="button">전체 복사</button>
+            </div>
+          </div>
+          <pre class="yaml-pre" id="yamlPre"></pre>
+        </div>
+      </div>
+
+      <div class="tab-body" data-body="image">
+        <div class="empty" id="imageEmpty">보드 이미지가 아직 없습니다.</div>
+        <div id="imageView" hidden>
+          <div class="image-frame"><img id="boardImage" alt="4×4 디자인 보드 시안"></div>
+          <p class="image-meta" id="imageMeta"></p>
+          <div class="image-actions">
+            <button class="btn primary" id="saveImageBtn" type="button">이미지 저장</button>
+            <button class="btn" id="revealBtn" type="button">폴더에서 보기</button>
+            <button class="btn" id="regenImageBtn" type="button">이미지만 다시 생성</button>
+            <button class="btn" id="prepareImageVideoBtn" type="button" data-image-control>이 보드로 장면 준비</button>
+          </div>
+          <p class="hint" id="imagePathHint"></p>
+        </div>
+        <div class="import-row">
+          <button class="btn" id="importImageBtn" type="button">외부 이미지 가져오기 (GPT 웹 등에서 만든 보드)</button>
+        </div>
+      </div>
+
+      <div class="tab-body" data-body="video">
+        <div class="empty" id="videoEmpty">영상이 아직 없습니다.</div>
+        <div id="videoView" hidden>
+          <div class="image-frame"><video id="videoPlayer" controls loop playsinline preload="metadata"></video></div>
+          <p class="image-meta" id="videoMeta"></p>
+          <ul class="video-notes" id="videoNotes"></ul>
+          <div class="image-actions">
+            <button class="btn primary" id="saveVideoBtn" type="button">영상 저장 (MP4)</button>
+            <button class="btn" id="revealVideoBtn" type="button">폴더에서 보기</button>
+            <button class="btn" id="revealCodeBtn" type="button">모션 코드 보기</button>
+          </div>
+        </div>
+        <div class="import-row">
+          <button class="btn" id="makeVideoBtn" type="button">이 명세로 영상 만들기 / 다시 만들기</button>
+        </div>
+      </div>
+
+      <div class="tab-body" data-body="image-video">
+        <div class="image-video-heading">
+          <div>
+            <h3>이미지 활용 영상</h3>
+            <p>선택한 장면을 영상으로 만들고, 보드 순서대로 연결합니다.</p>
+          </div>
+          <button class="btn" id="prepareScenesBtn" type="button" data-image-control>보드에서 장면 준비</button>
+        </div>
+        <div class="empty" id="imageVideoEmpty">기록에서 보드 이미지를 불러오거나, 왼쪽에서 이미지 활용 영상을 선택해 보드를 먼저 만들어 주세요.</div>
+        <div id="imageVideoWorkbench" hidden>
+          <div class="scene-provider-row">
+            <label class="field"><span>영상 생성 서비스</span><select id="imageVideoProvider" data-image-control></select></label>
+            <label class="field scene-resolution-field"><span>해상도</span><select id="imageVideoResolution" data-image-control></select></label>
+            <div class="scene-provider-actions">
+              <span id="imageProviderStatus" class="muted" role="status"></span>
+              <button class="btn" id="configureImageProviderBtn" type="button" data-image-control>영상 API 연결</button>
+              <button class="btn ghost" id="disconnectImageProviderBtn" type="button" data-image-control hidden>연결 해제</button>
+              <button class="btn ghost" id="imageProviderPricingBtn" type="button" data-image-control hidden>요금 확인</button>
+              <button class="btn ghost" id="imageProviderSetupBtn" type="button" data-image-control hidden>API 발급 안내</button>
+            </div>
+          </div>
+          <p class="field-hint" id="imageProviderHint"></p>
+          <p class="scene-billing-note">생성을 시작하면 선택한 장면 이미지와 연출 지시문을 외부 서비스에 전송합니다. 웹 구독과 별도로 API 사용 요금이 발생하며, 전송 전에 확인할 수 있습니다.</p>
+
+          <div class="scene-workspace">
+            <section class="scene-library" aria-label="보드의 16개 셀">
+              <div class="scene-library-heading"><h4>장면 선택</h4><span id="sceneSelectionSummary" class="muted" aria-live="polite"></span></div>
+              <p class="field-hint">앞 12개는 영상 장면, 뒤 4개는 참고 셀입니다. 체크한 셀만 영상에 포함됩니다.</p>
+              <div class="scene-grid" id="sceneGrid"></div>
+            </section>
+            <section class="scene-editor" id="sceneEditor" aria-label="선택한 장면 편집">
+              <div class="scene-editor-heading"><h4 id="sceneEditorHeading">장면</h4><span id="sceneStatus" class="scene-status" role="status"></span></div>
+              <div class="scene-comparison">
+                <figure><figcaption>보드 원본</figcaption><div class="scene-media"><img id="sceneSourceImage" alt="선택한 장면의 보드 이미지"></div></figure>
+                <figure><figcaption>생성한 클립</figcaption><div class="scene-media"><video id="sceneVideoPlayer" controls loop playsinline preload="metadata" hidden></video><p id="sceneClipEmpty" class="muted">아직 클립이 없습니다.</p></div></figure>
+              </div>
+              <label class="field"><span>장면 이름</span><input id="sceneTitle" type="text" maxlength="120" data-image-control></label>
+              <label class="field"><span>움직임과 카메라 연출</span><textarea id="scenePrompt" rows="4" placeholder="예: 선수가 공을 던지며 팔과 몸이 자연스럽게 움직인다. 카메라는 옆에서 천천히 따라간다." data-image-control></textarea></label>
+              <div class="scene-duration-row">
+                <label class="field"><span>장면 길이</span><select id="sceneDuration" data-image-control></select></label>
+                <button class="btn" id="importSceneClipBtn" type="button" data-image-control>이 장면에 클립 가져오기</button>
+              </div>
+              <p id="sceneError" class="scene-error" role="status" hidden></p>
+              <p class="field-hint" id="scenePendingHint" hidden>진행 중이거나 결과를 확인할 수 없는 요청입니다. 다시 생성하지 말고 상태 확인을 눌러 주세요.</p>
+              <button class="btn mini" id="recoverSceneBtn" type="button" data-image-control hidden>미접수 확인 후 재설정</button>
+            </section>
+          </div>
+
+          <div class="scene-plan-actions">
+            <span class="muted" id="sceneSaveStatus" role="status">장면 설정이 저장되어 있습니다.</span>
+            <button class="btn mini" id="saveScenePlanBtn" type="button" data-image-control>설정 저장</button>
+            <button class="btn mini ghost" id="discardSceneEditsBtn" type="button" data-image-control>변경 취소</button>
+          </div>
+          <div class="scene-generation-actions">
+            <button class="btn primary" id="generateScenesBtn" type="button" data-image-control>선택한 미완료 장면 생성</button>
+            <button class="btn" id="refreshScenesBtn" type="button" data-image-control>진행 중인 장면 상태 확인</button>
+            <button class="btn" id="exportImageVideoBtn" type="button" data-image-control>선택한 클립을 MP4로 합치기</button>
+          </div>
+          <p class="field-hint" id="sceneActionHint" aria-live="polite"></p>
+          <p class="scene-error" id="imageVideoError" role="status" hidden></p>
+          <div class="scene-export-options">
+            <label class="field"><span>합칠 영상의 음악</span>
+              <select id="imageVideoMusicSource" data-image-control>
+                <option value="none" selected>원본 클립의 소리 유지</option>
+                <option value="mixkit">Mixkit 자동 선택</option>
+                <option value="file">내 음악 파일</option>
+              </select>
+            </label>
+            <div class="music-file" id="imageVideoMusicFileRow" hidden>
+              <button id="pickImageMusicBtn" class="btn" type="button" data-image-control>음악 파일 선택…</button>
+              <span id="imageVideoMusicFileName" class="muted">선택된 파일 없음</span>
+            </div>
+          </div>
+
+          <section class="image-video-output" id="imageVideoOutput" hidden>
+            <h4>완성된 이미지 활용 영상</h4>
+            <div class="image-frame"><video id="imageVideoPlayer" controls playsinline preload="metadata"></video></div>
+            <p class="image-meta" id="imageVideoMeta"></p>
+            <div class="image-actions">
+              <button class="btn primary" id="saveImageVideoBtn" type="button" data-image-control>이미지 영상 저장 (MP4)</button>
+              <button class="btn" id="revealImageVideoBtn" type="button" data-image-control>폴더에서 보기</button>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="tab-body" data-body="history">
+        <div class="empty" id="historyEmpty">저장된 기록이 없습니다.</div>
+        <div class="history-list" id="historyList"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

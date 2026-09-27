@@ -79,7 +79,9 @@ test("all original IPC methods and spec → board → video → history work thr
   const main = await fs.readFile(path.join(sourceRoot, "main.cjs"), "utf8");
   const originalMethods = Array.from(main.matchAll(/ipcMain\.handle\('([^']+)'/g), match => match[1]);
   assert.equal(originalMethods.length, 26);
-  assert.deepEqual([...engine.methods].sort(), originalMethods.sort());
+  assert.deepEqual([...engine.methods].sort(), [...originalMethods,
+    ...["Providers", "Configure", "Disconnect", "Prepare", "SavePlan", "Generate", "Refresh", "Recover", "ImportClip", "Export"].map(name => "studio:imageVideo" + name)
+  ].sort());
   const entry = await createEntry(engine);
   const image = await engine.invoke("studio:board", { id: entry.id });
   assert.equal(image.ok, true, image.error); assert.equal(image.entry.hasImage, true);

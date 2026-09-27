@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const subscriptions = new Map();
-  const generationMethods = new Set(['studio:spec', 'studio:board', 'studio:video']);
+  const generationMethods = new Set(['studio:spec', 'studio:board', 'studio:video', 'studio:imageVideoPrepare', 'studio:imageVideoGenerate', 'studio:imageVideoRefresh', 'studio:imageVideoRecover', 'studio:imageVideoImportClip', 'studio:imageVideoExport']);
   let flowCancelled = false, flowActive = false, flowVersion = 0;
   // The original UI runs spec, board, and video as separate IPC calls. Retain a
   // cancellation across that sequence so a later stage cannot start a new job.
@@ -37,8 +37,16 @@
     claude: Object.freeze({status: () => invoke('studio:claudeStatus'), loginStart: () => invoke('studio:claudeLoginStart'),
       loginComplete: code => invoke('studio:claudeLoginComplete', {code}), loginCancel: () => invoke('studio:claudeLoginCancel'), logout: () => invoke('studio:claudeLogout')}),
     spec: input => invoke('studio:spec', input), board: input => invoke('studio:board', input), video: input => invoke('studio:video', input),
+    imageVideo: Object.freeze({
+      providers: () => invoke('studio:imageVideoProviders'), configure: input => invoke('studio:imageVideoConfigure', input),
+      disconnect: input => invoke('studio:imageVideoDisconnect', input), prepare: input => invoke('studio:imageVideoPrepare', input),
+      savePlan: input => invoke('studio:imageVideoSavePlan', input), generate: input => invoke('studio:imageVideoGenerate', input),
+      refresh: input => invoke('studio:imageVideoRefresh', input), importClip: input => invoke('studio:imageVideoImportClip', input),
+      recover: input => invoke('studio:imageVideoRecover', input),
+      export: input => invoke('studio:imageVideoExport', input)
+    }),
     pickMusic: () => invoke('studio:pickMusic'), installFfmpeg: () => invoke('studio:installFfmpeg'),
-    videoSaveAs: id => invoke('studio:videoSaveAs', {id}), videoReveal: (id,which) => invoke('studio:videoReveal', {id,which}),
+    videoSaveAs: (id,kind) => invoke('studio:videoSaveAs', {id,kind}), videoReveal: (id,which,kind) => invoke('studio:videoReveal', {id,which,kind}),
     cancel: () => invoke('studio:cancel'), history: () => invoke('studio:history'),
     historyGet: id => invoke('studio:historyGet', {id}), historyRemove: id => invoke('studio:historyRemove', {id}),
     imageSaveAs: id => invoke('studio:imageSaveAs', {id}), imageImport: id => invoke('studio:imageImport', {id}),

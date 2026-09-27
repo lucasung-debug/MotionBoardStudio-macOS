@@ -1,89 +1,99 @@
 # MotionBoard Studio for macOS
 
-A source-based macOS port of the creator-provided **MotionBoardStudio 0.3.2** application. It preserves the original topic-to-video workflow, interface, prompts, and production engine.
+제작자가 제공한 **MotionBoardStudio 0.3.2** 소스를 바탕으로 만든 macOS 앱입니다. 원작의 주제 → 명세 → 디자인 보드 → 모션 그래픽 흐름을 유지하고, 보드 속 인물과 사물이 움직이는 **이미지 활용 영상** 제작 경로를 추가했습니다.
 
-The Swift macOS host presents the original interface in WebKit. A local Node.js process runs the production logic; native Swift services provide Keychain access, file dialogs, asset delivery, and DOM frame capture. The macOS runtime does not require Electron. This is a Swift host with preserved JavaScript production code, not a complete rewrite of that code in Swift.
+Swift 앱이 WebKit 화면을 띄우고, 로컬 Node.js 프로세스가 제작 로직을 실행합니다. 키체인, 파일 선택, 미디어 제공, 화면 캡처는 Swift에서 처리합니다. Electron은 필요하지 않습니다. JavaScript 제작 엔진을 유지한 Swift 호스트 구조입니다.
 
-**Status:** the preserved production workflow is implemented and has passed both isolated checks and a real-account generation run. Fresh app logins were used for ChatGPT specification/board generation and Claude direction/frame review, followed by automatic Mixkit music, native rendering, and history persistence. The live result was a 1440×1440, 60 fps, 8.8-second H.264/AAC video. This is acceptance of that recorded workflow, not a guarantee for every account or generated composition.
+**현재 상태:** 공개된 DMG는 기존 **0.3.2-mac.3**입니다. 새 이미지 활용 영상 기능은 개발 중인 소스에 구현되어 있으며, 이 공개 DMG에는 포함되어 있지 않습니다. Grok·Kling 요청 처리는 모의 응답으로, 이미지 분할과 MP4 합성은 실제 로컬 FFmpeg로 검증했습니다. 유료 API를 통한 실제 영상 생성과 결과 품질 검증은 아직 하지 않았습니다.
 
-![Native macOS interface showing a local verification production](docs/images/native-studio.png)
+기존 모션 그래픽 경로는 ChatGPT 명세·보드 생성, Claude 연출·프레임 점검, Mixkit 음악 선택, 네이티브 렌더링과 기록 저장을 실계정으로 확인했습니다. 당시 결과는 1440×1440, 60fps, 8.8초 H.264/AAC 영상입니다. 이 기록이 새 이미지 영상 서비스의 실계정 검증을 대신하지는 않습니다.
 
-*Native WebKit screenshot, 1380×900. Provider responses and the visible signed-in account states are local test fixtures; this image does not demonstrate real login or AI generation.*
+![Mac 앱의 이미지 활용 영상 장면 편집 화면](docs/images/native-image-video.png)
 
-## Install on a Mac
+*새 장면 편집 화면의 1380×900 네이티브 WebKit 검증 이미지입니다. 계정 표시는 테스트 데이터이고, 보드는 합성 색상표, 클립은 로컬 테스트 영상입니다. Grok·Kling이 생성한 결과를 보여 주는 이미지는 아닙니다.*
 
-Download the Apple Silicon DMG from [GitHub Releases](https://github.com/lucasung-debug/MotionBoardStudio-macOS/releases). Open it and drag **MotionBoard Studio.app** to **Applications**, eject the disk, and open the installed app. macOS 14 or later is required. Node.js and FFmpeg are included; Homebrew and developer tools are not required for the packaged application.
+## Mac에 설치
 
-The current distribution uses an ad-hoc signature and is **not Apple-notarized**. If macOS blocks its first launch, follow [Apple's instructions](https://support.apple.com/en-us/102445): after verifying the download's source and attempting to open it, allow it in **System Settings → Privacy & Security → Open Anyway**. Developer ID signing, notarization, and Intel distribution remain future work.
+[0.3.2-mac.3 릴리스](https://github.com/lucasung-debug/MotionBoardStudio-macOS/releases/tag/v0.3.2-mac.3)에서 Apple Silicon용 DMG를 받으세요. 열어서 **MotionBoard Studio.app**을 **Applications**로 드래그한 다음, 디스크를 추출하고 응용 프로그램 폴더의 앱을 실행합니다. macOS 14 이상이 필요합니다. Node.js와 FFmpeg를 포함하므로 설치받는 사람에게 Homebrew나 개발 도구가 필요하지 않습니다.
 
-Sign in to ChatGPT or Claude inside the app. Automatic board-image generation requires ChatGPT. The installer contains no account credentials or generated user content. Its current video feature creates motion graphics from the specification and board references; it does not animate subjects inside a board through an image-to-video AI model.
+현재 배포본은 무료 배포 방식을 유지하며 ad-hoc 서명만 적용되어 있습니다. **Apple 공증은 받지 않았습니다.** 처음 실행할 때 macOS가 차단하면 다운로드 출처를 확인한 뒤 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기**에서 허용할 수 있습니다. 자세한 절차는 [Apple 공식 안내](https://support.apple.com/ko-kr/102445)를 참고하세요. Developer ID 서명·공증과 Intel용 배포는 완료되지 않았습니다.
 
-## Production workflow
+명세 생성에는 앱에서 ChatGPT 또는 Claude 로그인이 필요하고, 자동 보드 이미지 생성에는 ChatGPT 로그인이 필요합니다. 설치 파일에는 계정 정보와 사용자의 생성물이 들어 있지 않습니다. **공개된 mac.3 DMG는 모션 그래픽 경로를 제공합니다.** 아래 두 제작 경로를 함께 사용하려면 현재 소스의 개발본을 실행하세요.
 
-1. Enter a topic, mood, style, copy, aspect ratio, desired duration, and any exclusions.
-2. Generate a production specification with ChatGPT or Claude and inspect its concept and YAML.
-3. Optionally generate a 4×4 board through ChatGPT, or import an existing board image.
-4. Choose automatic music selection, a local music file, or sound effects without music.
-5. Use the structured direction engine or experimental generated HTML/CSS/JavaScript, with optional frame review and repair.
-6. Render an MP4 with audio, reopen it from history, save the video or image, and reveal the associated composition.
+## 두 가지 제작 경로
 
-The local implementation connects all 26 original `window.studio` operations, including generation, progress, cancellation, history, import, save, and reveal actions. Draft rendering uses 30 fps; final rendering uses 60 fps and four subframes for motion blur. A local full-size run produced an eight-second 1920×1080 H.264/AAC video at 60 fps. This verifies the tested production path, not every possible generated composition.
+| 화면에서 선택 | 만드는 영상 | 보드 사용 방식 |
+| --- | --- | --- |
+| **모션 그래픽** | 글자·도형·색과 음악을 이용한 연출 | 명세, 팔레트, 문구를 참고해 구성 |
+| **이미지 활용 영상** | 원본 속 인물·사물이 움직이는 장면을 연결한 영상 | 보드를 실제 이미지로 잘라 Grok·Kling에 전달하거나, 직접 만든 클립을 가져와 사용 |
 
-Authentication uses fresh app-specific OAuth login and macOS Keychain storage. The app does not import another application's credentials or inherit provider tokens from the environment. Login status is read locally; generation and other provider operations use the network when invoked.
+모션 그래픽은 주제와 분위기 등을 입력하고 명세·보드를 만든 뒤, 연출 엔진 또는 실험적인 HTML/CSS/JavaScript 경로로 렌더링합니다. 음악 자동 선택·내 음악 파일·효과음, 프레임 점검과 수정, 기록 저장·다시 열기·MP4 저장을 지원합니다. 초안은 30fps, 최종 렌더는 60fps와 4개 서브프레임 모션 블러를 사용합니다.
 
-## Run from source
+이미지 활용 영상은 **보드에서 장면 준비 → 장면 선택·움직임 편집 → 영상 API 연결 → 생성 요청 → 상태 확인 → 원본과 비교 → MP4 합치기** 순서입니다. 16개 셀 중 앞 12개를 처음에 선택하며, 사용할 셀과 장면 이름·길이·움직임 설명을 바꿀 수 있습니다. Grok·Kling API 비용과 이미지 전송은 요청 전에 별도로 확인합니다. 앱의 ChatGPT·Claude 로그인과 영상 API 연결은 별개이며, 영상 API 키는 앱 전용 macOS 키체인에 보관합니다.
 
-Requirements: macOS 14 or later, a Swift 6 or later toolchain, Apple's developer tools, and Node.js. Audio processing and MP4 output also require a separate macOS FFmpeg installation. The app can locate FFmpeg or let you select an existing executable.
+직접 만든 영상은 **이 장면에 클립 가져오기**로 넣을 수 있습니다. 이미 보드가 있는 기록에서 클립 가져오기와 로컬 합성은 영상 API 연결 없이 사용할 수 있습니다. 자세한 사용법과 검증 범위는 [이미지 활용 영상 안내](docs/IMAGE-VIDEO.md)에 정리했습니다.
 
-Open `Package.swift` in Xcode and select the `MotionBoardStudio` product, or run from the checkout root:
+Remotion은 자막·도형·영상 등을 합성하는 도구로 검토할 수 있지만 현재 앱에는 추가하지 않았습니다. 현재 클립 합성은 FFmpeg가 담당합니다. Higgsfield 직접 연결은 추후 작업이며, 지금은 그곳에서 만든 영상을 파일로 가져올 수 있습니다.
+
+## 소스에서 실행
+
+macOS 14 이상, Swift 6 이상, Apple 개발 도구와 Node.js가 필요합니다. 소스에서 실행할 때 오디오 처리와 MP4 출력에는 별도로 설치한 macOS용 FFmpeg가 필요합니다. 앱에서 기존 실행 파일을 선택할 수도 있습니다.
+
+Xcode에서 `Package.swift`를 열고 `MotionBoardStudio`를 선택하거나, 저장소 루트에서 실행하세요.
 
 ```sh
 swift run MotionBoardStudio
 ```
 
-This launches the original production application. Its current interface is in Korean.
+현재 소스의 한국어 개발 화면을 실행합니다. `StudioUI/`가 실제 앱 화면이며, `upstream/`의 원본은 별도로 보존합니다.
 
-## Local app bundle
+## 로컬 앱 패키징
 
 ```sh
-scripts/build-app.sh
-scripts/build-dmg.sh
+scripts/build-app.sh "dist/MotionBoard Studio Development.app"
+scripts/build-dmg.sh "dist/MotionBoard Studio Development.app" "dist/MotionBoardStudio-development-arm64.dmg"
 ```
 
-The default app output is `dist/MotionBoard Studio 0.3.2-mac.3.app`; pass a different destination as the first argument to preserve an existing bundle. The DMG script accepts an app path and a new DMG destination. Both scripts refuse to overwrite existing outputs. The arm64 build includes official Node.js 24.21.0 and a separately compiled FFmpeg executable with system-only dependencies. Its FFmpeg build disables GPL/nonfree components and uses Apple's VideoToolbox for H.264 output. The exact FFmpeg source, license texts, release signature, and build recipe are included inside the app.
+개발본은 공개 배포본과 구분되는 새 경로에 만드세요. 두 스크립트는 기존 결과물을 덮어쓰지 않으므로, 위 경로가 이미 있으면 다른 이름을 지정해야 합니다. 인수를 생략한 기본 앱 경로는 `dist/MotionBoard Studio 0.3.2-mac.3.app`입니다. 로컬 빌드는 GitHub 릴리스를 변경하거나 Apple 공증을 수행하지 않습니다.
 
-See [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the packaging procedure, the Developer ID/notarization release workflow, and verification scope. `python3 scripts/release-macos.py --check` checks the distributor's signing prerequisites before attempting a new release. The source checkout still supports an independently installed FFmpeg.
+arm64 패키지에는 공식 Node.js 24.21.0과 별도로 컴파일한 FFmpeg가 들어갑니다. FFmpeg는 GPL/nonfree 구성 요소를 제외하고 Apple VideoToolbox로 H.264를 인코딩합니다. 정확한 FFmpeg 소스·라이선스·릴리스 서명·빌드 절차도 앱에 포함합니다.
 
-## Verification
+패키징과 기존 DMG의 검증 범위는 [배포 문서](docs/DISTRIBUTION.md)를 참고하세요. 나중에 서명·공증할 때 사용할 `scripts/release-macos.py`도 보관되어 있지만, 현재 무료 배포본에는 공증이 적용되지 않았습니다.
+
+## 검증
 
 ```sh
 node --test Tests/original-auth.test.cjs Tests/original-engine.test.cjs Tests/original-bridge.test.cjs Tests/original-preview.test.cjs
+node --test Tests/video-providers.test.cjs Tests/image-video.test.cjs Tests/studio-ui.test.cjs Tests/image-video-media.test.cjs
 scripts/verify-render.sh .local/original-validation-new
 ```
 
-Use a new output directory for native verification. The script verifies the original production app and requires FFmpeg plus a usable macOS graphical session. For production dimensions, run `swift run MotionBoardStudio --verify-original --full-size --output .local/original-full-validation-new`. Provider responses are local fixtures. A separate Keychain test creates and removes its own synthetic item; no real account credential is used.
+네이티브 검증에는 새 출력 폴더, FFmpeg, 사용할 수 있는 macOS 그래픽 세션이 필요합니다. 제작 해상도로 확인하려면 `swift run MotionBoardStudio --verify-original --full-size --output .local/original-full-validation-new`를 실행합니다. 이 자동 검증은 로컬 테스트 응답을 사용하며, 키체인 검사도 별도의 가상 항목만 만듭니다.
 
-Recorded results include 46 original-app authentication/engine/bridge checks, native production rendering with audio, three production-size DOM captures, free-code rendering, cancellation preservation, and native UI playback/seeking. The separate live run used real providers and selected music after analyzing five Mixkit candidates. Google Fonts loading was also verified with four actual FontFace entries. See [ORIGINAL-VALIDATION.md](docs/ORIGINAL-VALIDATION.md) for the initial workflow checks and [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the installed DMG's 57-test and native rendering results.
+이미지 영상 미디어 검증은 공개 mac.3 앱의 번들 FFmpeg·ffprobe를 사용해 실제 합성 이미지를 16장으로 자르고, 움직이는 테스트 클립을 H.264/AAC로 합칩니다. 해당 번들이 없으면 미디어 통합 검사는 건너뛰므로 출력의 `skipped`를 확인하세요. 자세한 실행 조건과 결과는 [이미지 영상 검증 범위](docs/IMAGE-VIDEO.md#검증-범위)에 있습니다.
 
-## Project layout
+기존 제작 경로의 네이티브 렌더·취소 복구·재생·탐색·실계정 검증은 [ORIGINAL-VALIDATION.md](docs/ORIGINAL-VALIDATION.md)에, 공개 mac.3 설치본의 57개 테스트와 실제 렌더 결과는 [DISTRIBUTION.md](docs/DISTRIBUTION.md)에 기록했습니다. 새 기능의 유료 Grok·Kling 실생성 검증은 아직 남아 있습니다.
 
-| Location | Purpose |
+## 소스 구성
+
+| 위치 | 역할 |
 | --- | --- |
-| `upstream/MotionBoardStudio-0.3.2/` | Preserved original interface, guides, provider clients, and production engine |
-| `Sources/MotionBoardOriginal/` | Swift application, WebKit bridge, native actions, Keychain, and frame capture |
-| `Runtime/` | Local Node worker, original-workflow orchestration, authentication, storage, and render adapter |
-| `preview/` | Browser-only adapter for inspecting the original interface without desktop services |
-| `Sources/MotionBoardStudio/` | Earlier independent tile-editor prototype |
-| `docs/` | Port status, provenance, roadmap, and scoped validation records |
+| `upstream/MotionBoardStudio-0.3.2/` | 수정하지 않고 보존하는 원작 UI·가이드·서비스 클라이언트·제작 엔진 |
+| `StudioUI/` | 원작 화면을 바탕으로 두 제작 경로와 장면 작업 화면을 추가한 앱 UI |
+| `Sources/MotionBoardOriginal/` | Swift 앱, WebKit 연결, 네이티브 기능, 키체인, 화면 캡처 |
+| `Runtime/` | Node 작업 프로세스, 인증·기록, 기존 렌더링, 영상 서비스 연결, 클립 합성 |
+| `preview/` | 데스크톱 기능 없이 기존 화면을 확인하는 브라우저 어댑터 |
+| `Sources/MotionBoardStudio/` | 초기에 만든 별도 타일 편집기 프로토타입 |
+| `docs/` | 출처, 포팅·배포 상태, 사용법, 범위를 구분한 검증 기록 |
 
-The earlier tile editor remains available as `swift run MotionBoardPrototype`. Its `swift test` and `Tests/board-runtime.test.cjs` checks concern the prototype and shared prototype models, not original-application parity. Its older [validation record](docs/VALIDATION.md) and [JSON format](docs/PROJECT-FORMAT.md) retain that scope.
+초기 타일 편집기는 `swift run MotionBoardPrototype`으로 실행할 수 있습니다. `swift test`와 `Tests/board-runtime.test.cjs`, 이전 [검증 기록](docs/VALIDATION.md)과 [JSON 형식](docs/PROJECT-FORMAT.md)은 이 프로토타입 범위의 자료입니다.
 
-For UI inspection alone, `node scripts/preview-original.cjs` starts the separate localhost preview. Its login and generation actions remain unavailable by design; use the native product for the implemented services.
+`node scripts/preview-original.cjs`는 기존 화면의 별도 로컬 브라우저 미리보기입니다. 로그인·생성 기능은 연결하지 않으며, 새 제작 경로는 네이티브 앱에서 사용합니다.
 
-## Reference, contribution, and license
+## 참고 자료와 라이선스
 
-The [roadmap](docs/ROADMAP.md) separates remaining acceptance work from later workflow improvements. Charlie Hills's [motion graphics article](https://charliehills.substack.com/p/opus-55-motion-graphics) remains background design context; see [INSPIRATION.md](docs/INSPIRATION.md).
+[로드맵](docs/ROADMAP.md)에 기존 포팅의 남은 작업을, [이미지 영상 안내](docs/IMAGE-VIDEO.md)에 새 경로의 한계를 정리했습니다. Charlie Hills의 [모션 그래픽 글](https://charliehills.substack.com/p/opus-55-motion-graphics)은 디자인 참고 자료입니다. [INSPIRATION.md](docs/INSPIRATION.md)에서 참고 범위를 확인할 수 있습니다.
 
-Use [Issues](https://github.com/lucasung-debug/MotionBoardStudio-macOS/issues) for reproducible bugs and proposed changes. Include the macOS version, reproduction steps, and a minimal example without account data.
+버그와 개선 제안은 [Issues](https://github.com/lucasung-debug/MotionBoardStudio-macOS/issues)에 남겨 주세요. macOS 버전·재현 순서·최소 예시를 포함하고 계정 정보는 제외해 주세요.
 
-The repository uses the [MIT License](LICENSE), following the creator consent and publication direction supplied by the user. Original-source attribution and origin are recorded in [SOURCE-PROVENANCE.md](docs/SOURCE-PROVENANCE.md). No original GitHub repository URL was supplied, so this is a source-based port rather than a GitHub-network fork. Linked articles, music, fonts, and other third-party assets retain their own terms.
+제작자 동의와 사용자의 공개 지시에 따라 저장소에 [MIT 라이선스](LICENSE)를 적용했습니다. 원작 표기와 소스 출처는 [SOURCE-PROVENANCE.md](docs/SOURCE-PROVENANCE.md)에 기록했습니다. 원작 GitHub 주소는 제공되지 않았으므로 GitHub의 Fork 관계로 연결된 저장소는 아닙니다. 참고 글, 음악, 폰트, 런타임 등 외부 자료에는 각각의 약관과 라이선스가 적용됩니다.

@@ -55,6 +55,7 @@ struct StudioError: LocalizedError, Sendable {
 enum StudioPaths {
     static var sourceRoot: URL { Bundle.module.url(forResource: "MotionBoardStudio-0.3.2", withExtension: nil)! }
     static var runtimeRoot: URL { Bundle.module.url(forResource: "Runtime", withExtension: nil)! }
+    static var uiRoot: URL { Bundle.module.url(forResource: "StudioUI", withExtension: nil)! }
     static var userData: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("MotionBoardStudio", isDirectory: true)
