@@ -9,9 +9,10 @@ test("video CLI environment never inherits API keys or agent overrides", () => {
   const previous = Object.fromEntries(Object.keys(fields).map(key => [key, process.env[key]]));
   try {
     Object.assign(process.env, fields);
-    const environment = cliEnvironment(process.execPath, { GROK_HOME: "/tmp/app-owned-profile" });
+    const environment = cliEnvironment(process.execPath, { GROK_HOME: "/tmp/app-owned-profile", GROK_OFFICIAL_MARKETPLACE_AUTO_REGISTER: "1" });
     for (const key of Object.keys(fields)) assert.equal(environment[key], undefined);
     assert.equal(environment.GROK_DISABLE_API_KEY_AUTH, "1");
+    assert.equal(environment.GROK_OFFICIAL_MARKETPLACE_AUTO_REGISTER, "0");
     assert.equal(environment.GROK_HOME, "/tmp/app-owned-profile");
     assert.equal(environment.HOME, process.env.HOME);
   } finally {

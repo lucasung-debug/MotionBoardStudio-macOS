@@ -19,6 +19,8 @@ function cliEnvironment(executable, overrides = {}) {
     "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"])].join(path.delimiter);
   environment.NO_COLOR = "1";
   environment.GROK_DISABLE_API_KEY_AUTH = "1";
+  // Keep connection checks independent of the CLI's remote marketplace rollout.
+  environment.GROK_OFFICIAL_MARKETPLACE_AUTO_REGISTER = "0";
   for (const name of ["GROK_HOME", "GROK_DISABLE_API_KEY_AUTH"]) {
     if (typeof overrides[name] === "string") environment[name] = overrides[name];
   }

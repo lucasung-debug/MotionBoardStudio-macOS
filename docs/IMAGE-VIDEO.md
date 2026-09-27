@@ -77,6 +77,21 @@ Grok의 범위는 설치된 공식 CLI의 `bundled/skills/imagine/SKILL.md`와 [
 node --test Tests/*subscription.test.cjs Tests/video-cli.test.cjs Tests/subscription-connections.test.cjs Tests/video-providers.test.cjs Tests/image-video.test.cjs Tests/studio-ui.test.cjs
 ```
 
+### 2026-09-28 Grok profile compatibility — development build 10
+
+The build 9 connection check passed before Grok added further official marketplace metadata. A later check then rejected `official_marketplace_auto_installed` and `[[marketplace.sources]]`, although every required authentication and tool-isolation setting remained unchanged. This was an incomplete compatibility fix, not evidence that the user changed authentication settings.
+
+The validator now accepts the two known boolean bookkeeping fields and exactly one official source with the [public CLI constants](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-plugin-marketplace/src/lib.rs): `xAI Official` and `https://github.com/xai-org/plugin-marketplace.git`. Additional sources, fields, duplicate declarations, changed required settings, and symlinked profiles remain rejected. The profile and credentials are preserved. CLI and login launches also set `GROK_OFFICIAL_MARKETPLACE_AUTO_REGISTER=0`, following the [documented implementation precedence](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-shell/src/agent/config.rs). The installed binary's rollout suppression is not independently proven; accepting existing official metadata is the verified compatibility fix.
+
+- The regression first passed authentication, added the CLI's later registration metadata, then reproduced the connection failure. It passes after the fix, including repeated checks and unchanged config/credential fixtures.
+- All 57 affected Grok, Kling, process, connection, and image-video tests passed. Separate review found no blocking schema-validation issue.
+- The packaged Node and Runtime checked both real OAuth connections across **three independent process starts**. All succeeded, and the existing Grok configuration hash stayed identical throughout. No video generation or image upload was requested.
+- All 20 Runtime/StudioUI resources match the source. App signature, DMG checksum, and the mounted app signature passed verification.
+
+Local artifacts: `dist/MotionBoard Studio Development 10.app` and `dist/MotionBoardStudio-development-10-arm64.dmg` (73,108,992 bytes; SHA256 `e1059e804f0a28555b8fe20ccf765022d9707bb1d0ed82a064b5ef480afb72e9`). Previous builds remain available. This is an ad-hoc signed local development package; no public release or notarization was performed.
+
+Evidence: `.local/grok-profile-lifecycle-fix-20260928/before.log`, `final-tests.log`, `bundled-lifecycle-status.json`, and `package-receipt.json`. Real video generation and visual consistency with the source board remain unverified.
+
 ### 2026-09-28 연결 오류 수정 · 개발본 9
 
 로그인 후에도 연결되지 않던 원인 두 가지를 수정했습니다. Grok은 CLI가 정상적으로 추가한 `marketplace.default_skills_installs_purged` 설정 때문에 앱의 파일 전체 비교에 실패했습니다. 필요한 인증·도구 제한 값은 그대로 검사하면서 해당 메타데이터와 주석·공백 변경을 허용합니다. 기존 설정과 인증 파일은 덮어쓰지 않습니다. Kling CLI 0.2.0은 긴 JSON을 출력하고 바로 종료하면서 파이프 응답이 65,536바이트에서 잘렸습니다. 공식 `--quiet` 옵션으로 완전한 compact JSON을 받도록 수정했고, 불완전한 응답은 계속 거부합니다. 설정 오류·실행 오류도 로그인 안내와 구분해 표시합니다.

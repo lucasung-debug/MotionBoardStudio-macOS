@@ -13,6 +13,7 @@ const { CATALOG, prepareGrokHome, inspectGrokSubscription, createGrokSubscriptio
 const SESSION = "12345678-1234-4234-8234-123456789012";
 const EXE = "/fixture/grok";
 const TOOL = "reference_to_video";
+const OFFICIAL_MARKETPLACE = '[marketplace]\ndefault_skills_installs_purged = true\nofficial_marketplace_auto_installed = true\n\n[[marketplace.sources]]\nname = "xAI Official"\ngit = "https://github.com/xai-org/plugin-marketplace.git"\n';
 const versionRun = async (_executable, args) => ({ exitCode: 0, stderr: "", stdout: args[0] === "--version" ? "grok 1.0.41 (fixture)" : "stdio --no-leader" });
 const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(16)]);
 const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from("ftypisom"), Buffer.alloc(20)]);
@@ -130,6 +131,48 @@ test("isolated profile still rejects changed, missing, duplicate, or unknown set
   }
 });
 
+test("connection survives the CLI adding its official marketplace after the first successful check", async t => {
+  const f = await fixture(t), profile = await prepareGrokHome(f.home), stub = fakeSpawn();
+  const configFile = path.join(profile, "config.toml"), initial = await fs.readFile(configFile, "utf8");
+  const credentialFile = path.join(profile, "auth.json");
+  await fs.writeFile(credentialFile, "opaque-private-fixture");
+  const inspect = () => inspectGrokSubscription({ ...f, executable: EXE, run: versionRun, spawnImpl: stub.spawnImpl });
+  assert.equal((await inspect()).configured, true);
+  // The CLI may register it on a later process start when its rollout changes.
+  // This is the serialized public metadata, never an actual user's auth store.
+  const saved = initial + '\n' + OFFICIAL_MARKETPLACE;
+  await fs.writeFile(configFile, saved);
+  assert.equal((await inspect()).configured, true);
+  await prepareGrokHome(f.home);
+  assert.equal((await inspect()).configured, true);
+  assert.equal(await fs.readFile(configFile, "utf8"), saved);
+  assert.equal(await fs.readFile(credentialFile, "utf8"), "opaque-private-fixture");
+  assert.deepEqual(stub.requests.map(r => r.method), ["initialize", "authenticate", "initialize", "authenticate", "initialize", "authenticate"]);
+});
+
+test("official marketplace compatibility does not permit extra sources or settings", async t => {
+  const f = await fixture(t), profile = await prepareGrokHome(f.home);
+  const configFile = path.join(profile, "config.toml"), initial = await fs.readFile(configFile, "utf8");
+  const unsafe = [
+    OFFICIAL_MARKETPLACE.replace('name = "xAI Official"', 'name = "Other"'),
+    OFFICIAL_MARKETPLACE.replace('git = "https://github.com/xai-org/plugin-marketplace.git"', 'git = "https://example.invalid/other.git"'),
+    OFFICIAL_MARKETPLACE.replace('git = "https://github.com/xai-org/plugin-marketplace.git"', 'path = "/fixture/plugins"'),
+    OFFICIAL_MARKETPLACE.replace('name = "xAI Official"\n', ''),
+    OFFICIAL_MARKETPLACE.replace('official_marketplace_auto_installed = true', 'official_marketplace_auto_installed = "true"'),
+    OFFICIAL_MARKETPLACE + 'branch = "unapproved"\n',
+    OFFICIAL_MARKETPLACE + 'git = "https://example.invalid/other.git"\n',
+    OFFICIAL_MARKETPLACE + '\n[[marketplace.sources]]\nname = "xAI Official"\ngit = "https://github.com/xai-org/plugin-marketplace.git"\n',
+    '[marketplace]\n[[marketplace.sources]]\n',
+    OFFICIAL_MARKETPLACE + '\n[hooks]\nenabled = true\n'
+  ];
+  for (const metadata of unsafe) {
+    const saved = initial + '\n' + metadata;
+    await fs.writeFile(configFile, saved);
+    await assert.rejects(inspectGrokSubscription({ ...f, executable: EXE, run: () => assert.fail("CLI must not start") }), { code: "CLI_PROFILE_INVALID" });
+    assert.equal(await fs.readFile(configFile, "utf8"), saved);
+  }
+});
+
 test("isolated profile rejects symlinked config without modifying its target", async t => {
   const f = await fixture(t), target = path.join(f.root, "external.toml");
   await fs.mkdir(f.home);
@@ -146,6 +189,7 @@ test("connection status authenticates only the advertised cached OAuth method wi
   assert.deepEqual(stub.requests.map(r => r.method), ["initialize", "authenticate"]);
   const env = stub.launches[0].options.env;
   assert.equal(env.GROK_DISABLE_API_KEY_AUTH, "1"); assert.equal(env.GROK_DISABLE_AUTOUPDATER, "1");
+  assert.equal(env.GROK_OFFICIAL_MARKETPLACE_AUTO_REGISTER, "0");
   assert.equal(env.XAI_API_KEY, undefined); assert.equal(env.GROK_CODE_XAI_API_KEY, undefined);
   assert.deepEqual(stub.launches[0].args, ["agent", "--no-leader", "stdio"]);
 });

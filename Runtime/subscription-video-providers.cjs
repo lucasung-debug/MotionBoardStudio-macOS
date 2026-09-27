@@ -11,7 +11,7 @@ const PROVIDERS = Object.freeze({ grok: grok.CATALOG, kling: kling.CATALOG });
 const shellQuote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
 const fail = message => Object.assign(new Error(message), { code: "VIDEO_PROVIDER_UNCONFIGURED" });
 const CONNECTION_ERRORS = Object.freeze({
-  CLI_PROFILE_INVALID: "앱 전용 Grok 설정을 확인하지 못했습니다. 인증 방식이나 도구 제한 설정이 변경되었는지 확인해 주세요.",
+  CLI_PROFILE_INVALID: "앱 전용 Grok 설정을 읽거나 검증하지 못했습니다. 앱과 Grok CLI의 설정 호환성을 확인해 주세요.",
   CLI_UNSUPPORTED: "설치된 Grok CLI에서 필요한 연결 기능을 확인하지 못했습니다. 공식 CLI를 업데이트해 주세요.",
   CLI_SUBSCRIPTION_REQUIRED: "Grok 연결이 구독 로그인으로 제한되지 않아 중단했습니다. 앱 전용 연결 설정을 확인해 주세요.",
   CLI_TIMEOUT: "CLI 연결 확인 시간이 초과되었습니다. 네트워크를 확인한 뒤 상태를 새로고침해 주세요.",
@@ -109,7 +109,7 @@ function createSubscriptionConnections({ store, nativeCall, run = runCLI, locate
     const cliPath = [path.dirname(executable), path.dirname(process.execPath), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].join(":");
     const script = ["#!/bin/zsh", "unset XAI_API_KEY GROK_API_KEY GROK_API_BASE GROK_BASE_URL GROK_DEBUG GROK_LOG_FILE",
       `export PATH=${shellQuote(cliPath)}`, ...(provider === "grok" ? [
-        `export GROK_HOME=${shellQuote(grokHome)}`, "export GROK_DISABLE_API_KEY_AUTH=1"
+        `export GROK_HOME=${shellQuote(grokHome)}`, "export GROK_DISABLE_API_KEY_AUTH=1", "export GROK_OFFICIAL_MARKETPLACE_AUTO_REGISTER=0"
       ] : []), `cd ${shellQuote(profilesDir)}`,
       `${shellQuote(executable)} login${provider === "grok" ? " --oauth" : ""}`,
       "printf '\\n로그인이 끝나면 MotionBoard에서 연결 확인을 눌러 주세요.\\n'", ""].join("\n");

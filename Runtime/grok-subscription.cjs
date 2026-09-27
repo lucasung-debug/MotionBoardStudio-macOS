@@ -100,13 +100,22 @@ async function privateDirectory(directory) {
 // Grok rewrites config.toml on login/startup and adds marketplace bookkeeping.
 // Allow that metadata and formatting changes, while requiring every isolation
 // setting and rejecting unknown settings, duplicate keys, and unsupported syntax.
+// Public CLI constants: xai-grok-plugin-marketplace/src/lib.rs. Registration can
+// happen on a later process start when the CLI's remote rollout gate enables it.
+const OFFICIAL_MARKETPLACE = Object.freeze({ name: "xAI Official", git: "https://github.com/xai-org/plugin-marketplace.git" });
+const MARKETPLACE_FLAGS = new Set(["marketplace.default_skills_installs_purged", "marketplace.official_marketplace_auto_installed"]);
 const PROFILE_SECTIONS = new Set([...CONFIG.matchAll(/^\[([^\]]+)\]$/gm)].map(match => match[1]).concat("marketplace"));
 function profileValues(text) {
   if (Buffer.byteLength(text, "utf8") > 64 * 1024) return null;
   const values = new Map(), sections = new Set();
-  let section = "";
+  let section = "", source = null;
   for (const line of text.split(/\r?\n/)) {
     if (/^\s*(?:#.*)?$/.test(line)) continue;
+    if (/^\s*\[\[\s*marketplace\s*\.\s*sources\s*\]\]\s*(?:#.*)?$/.test(line)) {
+      // This profile may contain only the CLI's one auto-registered source.
+      if (source) return null;
+      source = new Map(); section = "marketplace.sources"; continue;
+    }
     const header = /^\s*\[\s*([A-Za-z0-9_-]+(?:\s*\.\s*[A-Za-z0-9_-]+)*)\s*\]\s*(?:#.*)?$/.exec(line);
     if (header) {
       section = header[1].replace(/\s/g, "");
@@ -115,22 +124,24 @@ function profileValues(text) {
     }
     const entry = /^\s*([A-Za-z0-9_-]+)\s*=\s*(true|false|"[^"\\\r\n]*"|'[^'\r\n]*')\s*(?:#.*)?$/.exec(line);
     if (!section || !entry) return null;
-    const key = `${section}.${entry[1]}`;
-    if (values.has(key)) return null;
-    values.set(key, entry[2] === "true" ? true : entry[2] === "false" ? false : entry[2].slice(1, -1));
+    const target = section === "marketplace.sources" ? source : values;
+    const key = target === source ? entry[1] : `${section}.${entry[1]}`;
+    if (target.has(key)) return null;
+    target.set(key, entry[2] === "true" ? true : entry[2] === "false" ? false : entry[2].slice(1, -1));
   }
-  return values;
+  return { values, source };
 }
 
-const REQUIRED_CONFIG = profileValues(CONFIG);
+const REQUIRED_CONFIG = profileValues(CONFIG).values;
 function matchesProfile(text) {
   const actual = profileValues(text);
   if (!actual) return false;
+  if (actual.source && (actual.source.size !== 2 || Object.entries(OFFICIAL_MARKETPLACE).some(([key, value]) => actual.source.get(key) !== value))) return false;
   for (const [key, value] of REQUIRED_CONFIG) {
-    if (!actual.has(key) || actual.get(key) !== value) return false;
+    if (!actual.values.has(key) || actual.values.get(key) !== value) return false;
   }
-  for (const [key, value] of actual) {
-    if (!REQUIRED_CONFIG.has(key) && !(key === "marketplace.default_skills_installs_purged" && typeof value === "boolean")) return false;
+  for (const [key, value] of actual.values) {
+    if (!REQUIRED_CONFIG.has(key) && !(MARKETPLACE_FLAGS.has(key) && typeof value === "boolean")) return false;
   }
   return true;
 }
