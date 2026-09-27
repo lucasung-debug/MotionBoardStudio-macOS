@@ -87,6 +87,54 @@ async function complete({ message, update, permission, options }, overrides = {}
   } });
 }
 
+async function autoComplete({ message, update, options }, { rawInput, callId = "video-1", finish = true } = {}) {
+  const args = rawInput || argsFromPrompt(message);
+  // Replay the real 1.0.41 wire sequence observed with inherited Claude auto
+  // permissions: proposal, typed input, completion, but no ACP permission RPC.
+  update({ sessionUpdate: "tool_call", toolCallId: callId, rawInput: args, _meta: { "x.ai/tool": { name: TOOL } } });
+  update({ sessionUpdate: "tool_call_update", toolCallId: callId, kind: "other",
+    rawInput: { variant: "ReferenceToVideo", ...args }, _meta: { "x.ai/tool": { name: TOOL } } });
+  if (!finish) return;
+  const file = path.join(options.env.GROK_HOME, "sessions", "scope", SESSION, "videos", "1.mp4");
+  await fs.mkdir(path.dirname(file), { recursive: true }); await fs.writeFile(file, mp4);
+  update({ sessionUpdate: "tool_call_update", toolCallId: callId, status: "completed",
+    rawOutput: { type: "ReferenceToVideo", path: file, filename: "1.mp4", session_folder: "videos" } });
+}
+
+test("old app profiles gain an explicit video ask rule with an intact recovery copy", async t => {
+  const f = await fixture(t), profile = await prepareGrokHome(f.home), file = path.join(profile, "config.toml");
+  const fresh = await fs.readFile(file, "utf8");
+  assert.match(fresh, /\[permission\]\nask = \["reference_to_video"\]/);
+  const old = fresh.replace('[permission]\nask = ["reference_to_video"]\n', '') + '\n' + OFFICIAL_MARKETPLACE;
+  await fs.writeFile(file, old);
+  const auth = path.join(profile, "auth.json"); await fs.writeFile(auth, "opaque-private-fixture");
+  await prepareGrokHome(f.home);
+  const migrated = await fs.readFile(file, "utf8");
+  assert.equal(migrated, old + '\n[permission]\nask = ["reference_to_video"]\n');
+  const backups = (await fs.readdir(profile)).filter(name => name.startsWith("config.toml.before-video-permission-"));
+  assert.equal(backups.length, 1);
+  assert.equal(await fs.readFile(path.join(profile, backups[0]), "utf8"), old);
+  assert.equal((await fs.stat(path.join(profile, backups[0]))).mode & 0o777, 0o600);
+  await prepareGrokHome(f.home);
+  assert.equal(await fs.readFile(file, "utf8"), migrated);
+  assert.equal(await fs.readFile(auth, "utf8"), "opaque-private-fixture");
+});
+
+test("video policy migration refuses existing foreign or weakened permission settings", async t => {
+  const f = await fixture(t), profile = await prepareGrokHome(f.home), file = path.join(profile, "config.toml");
+  const fresh = await fs.readFile(file, "utf8");
+  const old = fresh.replace('[permission]\nask = ["reference_to_video"]\n', '');
+  for (const suffix of ['[permission]\n', '[permission]\nask = []\n', '[permission]\nallow = ["reference_to_video"]\n',
+    '[permission]\nask = ["*"]\n', '[permission]\nask = \'["reference_to_video"]\'\n',
+    '[permission]\nask = ["reference_to_video"]\nask = ["reference_to_video"]\n']) {
+    const value = old + suffix; await fs.writeFile(file, value);
+    await assert.rejects(prepareGrokHome(f.home), { code: "CLI_PROFILE_INVALID" });
+    assert.equal(await fs.readFile(file, "utf8"), value);
+  }
+  await fs.writeFile(file, old + "[permission]\nask = [ 'reference_to_video' ] # keep explicit ask\n");
+  await prepareGrokHome(f.home);
+});
+
 test("isolated OAuth profile accepts CLI metadata and formatting without overwriting config or credentials", async t => {
   const f = await fixture(t);
   const profile = await prepareGrokHome(f.home);
@@ -237,6 +285,109 @@ test("unbounded runtime tool catalogs stop before any model prompt", async t => 
   const provider = createGrokSubscriptionProvider({ ...f, executable: EXE, run: versionRun, spawnImpl: stub.spawnImpl });
   await assert.rejects(provider.submit(f.input), { code: "CLI_UNSUPPORTED" });
   assert.equal(stub.requests.some(r => r.method === "session/prompt"), false);
+});
+
+test("empty or oversized call IDs never consume or bypass the single approval", async t => {
+  const f = await fixture(t), stub = fakeSpawn({ onPrompt: async data => {
+    const args = argsFromPrompt(data.message);
+    assert.equal((await data.permission("", args)).outcome.optionId, "no");
+    assert.equal((await data.permission("x".repeat(257), args)).outcome.optionId, "no");
+    await complete(data);
+    assert.equal((await data.permission("another-video", args)).outcome.optionId, "no");
+  } });
+  const provider = createGrokSubscriptionProvider({ ...f, executable: EXE, run: versionRun, spawnImpl: stub.spawnImpl });
+  await provider.submit(f.input);
+  assert.equal(stub.permissions.filter(p => p.result.outcome.optionId === "once").length, 1);
+});
+
+test("exact completed output without an ACP approval callback is retained instead of retried", async t => {
+  const f = await fixture(t), stub = fakeSpawn({ onPrompt: autoComplete });
+  const provider = createGrokSubscriptionProvider({ ...f, executable: EXE, run: versionRun, spawnImpl: stub.spawnImpl });
+  const result = await provider.submit(f.input);
+  const receipt = JSON.parse(await fs.readFile(path.join(f.workDir, "receipt.json"), "utf8"));
+  assert.equal(receipt.status, "succeeded"); assert.equal(receipt.approved, false);
+  assert.equal(receipt.observed, true); assert.equal(receipt.permissionCallbackMissing, true);
+  assert.equal(stub.permissions.length, 0);
+  assert.equal((await provider.poll(result.jobId)).status, "succeeded");
+  await assert.rejects(provider.submit(f.input), { code: "SUBMISSION_UNCONFIRMED" });
+  assert.equal(stub.requests.filter(r => r.method === "session/prompt").length, 1);
+});
+
+test("an observed call without completion remains uncertain even without an approval callback", async t => {
+  const f = await fixture(t), stub = fakeSpawn({ onPrompt: data => autoComplete(data, { finish: false }) });
+  const provider = createGrokSubscriptionProvider({ ...f, executable: EXE, run: versionRun, spawnImpl: stub.spawnImpl });
+  await assert.rejects(provider.submit(f.input), { code: "SUBMISSION_UNCONFIRMED" });
+  const receipt = JSON.parse(await fs.readFile(path.join(f.workDir, "receipt.json"), "utf8"));
+  assert.equal(receipt.observed, true); assert.equal(receipt.approved, false); assert.equal(receipt.status, "unconfirmed");
+  await assert.rejects(provider.poll(f.input.externalTaskId), { code: "SUBMISSION_UNCONFIRMED" });
+});
+
+test("model proposals may normalize numeric strings before the exact typed permission check", async t => {
+  const f = await fixture(t), stub = fakeSpawn({ onPrompt: async data => {
+    const args = argsFromPrompt(data.message);
+    data.update({ sessionUpdate: "tool_call", toolCallId: "video-1", rawInput: { ...args, duration: String(args.duration) },
+      _meta: { "x.ai/tool": { name: TOOL } } });
+    data.update({ sessionUpdate: "tool_call_update", toolCallId: "video-1", rawInput: { variant: "ReferenceToVideo", ...args },
+      _meta: { "x.ai/tool": { name: TOOL } } });
+    await complete(data);
+  } });
+  const provider = createGrokSubscriptionProvider({ ...f, executable: EXE, run: versionRun, spawnImpl: stub.spawnImpl });
+  const result = await provider.submit(f.input);
+  assert.equal((await provider.poll(result.jobId)).status, "succeeded");
+  assert.equal(stub.permissions.filter(p => p.result.outcome.optionId === "once").length, 1);
+});
+
+test("a proposal alone cannot validate a mismatched completed clip", async t => {
+  const f = await fixture(t), stub = fakeSpawn({ onPrompt: async data => {
+    const args = argsFromPrompt(data.message);
+    data.update({ sessionUpdate: "tool_call", toolCallId: "video-1", rawInput: { ...args, prompt: "Changed prompt" },
+      _meta: { "x.ai/tool": { name: TOOL } } });
+    data.update({ sessionUpdate: "tool_call_update", toolCallId: "video-1", status: "completed",
+      rawOutput: { type: "ReferenceToVideo", path: "/unapproved.mp4" } });
+  } });
+  const provider = createGrokSubscriptionProvider({ ...f, executable: EXE, run: versionRun, spawnImpl: stub.spawnImpl });
+  await assert.rejects(provider.submit(f.input), { code: "SUBMISSION_UNCONFIRMED" });
+  await assert.rejects(fs.access(path.join(f.workDir, "result.mp4")), { code: "ENOENT" });
+});
+
+test("changed auto-approved arguments cannot import a result or become safe to retry", async t => {
+  const f = await fixture(t), stub = fakeSpawn({ onPrompt: data => autoComplete(data,
+    { rawInput: { ...argsFromPrompt(data.message), prompt: "Unapproved prompt" } }) });
+  const provider = createGrokSubscriptionProvider({ ...f, executable: EXE, run: versionRun, spawnImpl: stub.spawnImpl });
+  await assert.rejects(provider.submit(f.input), { code: "SUBMISSION_UNCONFIRMED" });
+  const receipt = JSON.parse(await fs.readFile(path.join(f.workDir, "receipt.json"), "utf8"));
+  assert.equal(receipt.boundaryViolation, true); assert.equal(receipt.status, "unconfirmed");
+  await assert.rejects(fs.access(path.join(f.workDir, "result.mp4")), { code: "ENOENT" });
+});
+
+test("an unexpected second auto-approved call blocks further approvals and success reporting", async t => {
+  const f = await fixture(t), stub = fakeSpawn({ onPrompt: async data => {
+    await autoComplete(data);
+    const decision = await data.permission("video-2", argsFromPrompt(data.message));
+    assert.equal(decision.outcome.optionId, "no");
+    await autoComplete(data, { callId: "video-2", finish: false });
+  } });
+  const provider = createGrokSubscriptionProvider({ ...f, executable: EXE, run: versionRun, spawnImpl: stub.spawnImpl });
+  await assert.rejects(provider.submit(f.input), { code: "SUBMISSION_UNCONFIRMED" });
+  const receipt = JSON.parse(await fs.readFile(path.join(f.workDir, "receipt.json"), "utf8"));
+  assert.equal(receipt.boundaryViolation, true); assert.equal(receipt.status, "unconfirmed");
+  assert.equal(stub.permissions.filter(p => p.result.outcome.optionId === "once").length, 0);
+});
+
+test("connection loss after prompt transmission is uncertain before the first tool event", async t => {
+  const f = await fixture(t), stub = fakeSpawn({ onPrompt: async data => { data.child.emit("close", 1); } });
+  const provider = createGrokSubscriptionProvider({ ...f, executable: EXE, run: versionRun, spawnImpl: stub.spawnImpl });
+  await assert.rejects(provider.submit(f.input), { code: "SUBMISSION_UNCONFIRMED" });
+  const receipt = JSON.parse(await fs.readFile(path.join(f.workDir, "receipt.json"), "utf8"));
+  assert.equal(receipt.promptSent, true); assert.equal(receipt.status, "unconfirmed");
+});
+
+test("a normal response with no tool invocation does not blame the subscription", async t => {
+  const f = await fixture(t), stub = fakeSpawn();
+  const provider = createGrokSubscriptionProvider({ ...f, executable: EXE, run: versionRun, spawnImpl: stub.spawnImpl });
+  await assert.rejects(provider.submit(f.input), error => error.code === "GROK_GENERATION_NOT_STARTED" && !error.message.includes("구독"));
+  const receipt = JSON.parse(await fs.readFile(path.join(f.workDir, "receipt.json"), "utf8"));
+  assert.equal(receipt.status, "failed"); assert.equal(receipt.observed, undefined);
 });
 
 test("cancel after approval preserves an uncertain durable job and never resubmits", async t => {

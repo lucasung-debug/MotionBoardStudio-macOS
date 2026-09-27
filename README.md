@@ -4,7 +4,7 @@
 
 Swift 앱이 WebKit 화면을 띄우고, 로컬 Node.js 프로세스가 제작 로직을 실행합니다. 키체인, 파일 선택, 미디어 제공, 화면 캡처는 Swift에서 처리합니다. Electron은 필요하지 않습니다. JavaScript 제작 엔진을 유지한 Swift 호스트 구조입니다.
 
-**현재 상태:** 공개된 DMG는 기존 **0.3.2-mac.3**입니다. 새 이미지 활용 영상 기능은 개발 중인 소스에 구현되어 있으며, 이 공개 DMG에는 포함되어 있지 않습니다. 현재 소스의 새 영상 요청은 Grok 공식 CLI의 구독 로그인과 Kling 공식 CLI의 회원 계정 MCP를 사용합니다. API 키를 입력하는 경로는 새 생성에 사용하지 않습니다. **구독 계정을 통한 실제 영상 생성과 결과 품질 검증은 아직 하지 않았습니다.** 기존 이미지 분할·MP4 합성 검증은 실제 로컬 FFmpeg로 수행했습니다.
+**현재 상태:** 공개된 DMG는 기존 **0.3.2-mac.3**입니다. 새 이미지 활용 영상 기능은 개발 중인 소스에 구현되어 있으며, 이 공개 DMG에는 포함되어 있지 않습니다. 현재 소스의 새 영상 요청은 Grok 공식 CLI의 구독 로그인과 Kling 공식 CLI의 회원 계정 MCP를 사용합니다. API 키를 입력하는 경로는 새 생성에 사용하지 않습니다. **사용자가 요청한 실제 Grok 클립의 생성 완료와 로컬 복구를 확인했습니다. 수정 후 새 생성 요청과 Kling 실생성, 결과의 시각적 품질 검증은 남아 있습니다.** 기존 이미지 분할·MP4 합성 검증은 실제 로컬 FFmpeg로 수행했습니다.
 
 기존 모션 그래픽 경로는 ChatGPT 명세·보드 생성, Claude 연출·프레임 점검, Mixkit 음악 선택, 네이티브 렌더링과 기록 저장을 실계정으로 확인했습니다. 당시 결과는 1440×1440, 60fps, 8.8초 H.264/AAC 영상입니다. 이 기록이 새 이미지 영상 서비스의 실계정 검증을 대신하지는 않습니다.
 
@@ -35,7 +35,7 @@ Swift 앱이 WebKit 화면을 띄우고, 로컬 Node.js 프로세스가 제작 �
 
 **구독 연결 / 확인**에서 로그인 터미널을 열 수 있습니다. Grok은 앱 전용 `GROK_HOME`에서 `grok login --oauth`로 로그인하고 API 키 인증을 끕니다. 기존 Grok CLI의 로그인 정보를 읽어 복사하지 않습니다. Kling은 공식 CLI가 브라우저 OAuth 로그인을 관리하며, 현재 대화의 MCP 연결과 별도로 로그인합니다. 로그인 후 **상태 새로고침**으로 연결을 확인하고, Kling의 회원 등급·잔여 크레딧을 볼 수 있습니다. **앱에서 연결 해제**는 이 앱의 사용만 중지하며 CLI에서 로그아웃하지 않습니다.
 
-Development build 10 also handles Grok's later automatic marketplace registration, which could invalidate a previously working connection in build 9. Both OAuth connections passed checks across three independent process starts without changing the existing profile. See the [connection validation record](docs/IMAGE-VIDEO.md#2026-09-28-grok-profile-compatibility--development-build-10); actual video generation remains unverified.
+Development build 11 fixes completed Grok videos being reported as unstarted when the CLI inherits Claude's automatic permissions. The app adds an explicit video permission rule to its own profile, retains verified completed output even if the approval callback is missing, and preserves uncertain requests to prevent accidental retries. The existing first-scene clip was recovered locally without generating another video. See the [recovery and validation record](docs/IMAGE-VIDEO.md#2026-09-28-grok-completion-recovery--development-build-11).
 
 Grok CLI Imagine의 `reference_to_video`는 장면당 1~15초와 480p·720p를 사용합니다. Kling의 `kling-video-v2_6`는 5초·10초와 720p·1080p를 제공하며, 현재 어댑터는 오디오 생성을 끕니다. 실제 선택지는 계정에서 확인되는 범위에 따릅니다. 이전 API로 접수한 작업은 저장된 앱 키체인 정보와 원래 경로로 상태 확인만 이어가고, 새 요청에는 API 키로 전환하는 대체 경로가 없습니다.
 
@@ -82,7 +82,7 @@ scripts/verify-render.sh .local/original-validation-new
 
 이미지 영상 미디어 검증은 공개 mac.3 앱의 번들 FFmpeg·ffprobe를 사용해 실제 합성 이미지를 16장으로 자르고, 움직이는 테스트 클립을 H.264/AAC로 합칩니다. 해당 번들이 없으면 미디어 통합 검사는 건너뛰므로 출력의 `skipped`를 확인하세요. 자세한 실행 조건과 결과는 [이미지 영상 검증 범위](docs/IMAGE-VIDEO.md#검증-범위)에 있습니다.
 
-기존 제작 경로의 네이티브 렌더·취소 복구·재생·탐색·실계정 검증은 [ORIGINAL-VALIDATION.md](docs/ORIGINAL-VALIDATION.md)에, 공개 mac.3 설치본의 57개 테스트와 실제 렌더 결과는 [DISTRIBUTION.md](docs/DISTRIBUTION.md)에 기록했습니다. 이 과거 기록은 구독 CLI 전환의 검증 결과가 아닙니다. Grok·Kling 구독 계정의 실생성 검증은 아직 남아 있습니다.
+기존 제작 경로의 네이티브 렌더·취소 복구·재생·탐색·실계정 검증은 [ORIGINAL-VALIDATION.md](docs/ORIGINAL-VALIDATION.md)에, 공개 mac.3 설치본의 57개 테스트와 실제 렌더 결과는 [DISTRIBUTION.md](docs/DISTRIBUTION.md)에 기록했습니다. 이 과거 기록은 구독 CLI 전환의 검증 결과가 아닙니다. 최신 Grok 복구 검증과 남은 실생성 검증은 [IMAGE-VIDEO.md](docs/IMAGE-VIDEO.md)에 구분해 기록했습니다.
 
 현재 개발본은 명세 응답의 JSON 줄바꿈 오류를 복구하고, 그 외 형식 오류는 같은 서비스·모델에 한 번만 보정을 요청합니다. 잘린 응답과 인증 오류는 따로 표시하며 불완전한 명세는 저장하지 않습니다. 수정 내용과 검증 기록은 [명세 응답 처리](docs/SPECIFICATION-RECOVERY.md)에 있습니다. 이 수정도 기존 공개 mac.3 DMG에는 포함되어 있지 않습니다.
 

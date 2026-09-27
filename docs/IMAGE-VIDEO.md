@@ -2,7 +2,7 @@
 
 보드의 실제 이미지를 장면별로 나누고, Grok·Kling 구독 계정으로 인물과 사물이 움직이는 클립을 만든 뒤 하나의 MP4로 합치는 기능입니다. Grok은 공식 CLI의 Imagine 도구를, Kling은 공식 CLI를 통한 회원 계정 MCP를 사용합니다. 개발 중인 소스의 `StudioUI/` 화면과 `Runtime/`에 구현되어 있으며, **공개된 0.3.2-mac.3 DMG에는 아직 포함되지 않았습니다.**
 
-새 영상 요청에는 API 키를 사용하지 않습니다. 영상 생성은 Grok 구독 사용량 또는 Kling 회원 크레딧을 사용하며, 계정의 이용 권한과 남은 한도가 필요합니다. **구독 경로의 실계정 영상 생성과 원본 대비 AI 영상의 시각적 품질은 아직 검증하지 않았습니다.** 아래 과거 검증 기록은 로컬 미디어 처리와 당시 구현의 범위를 구분해 보관합니다.
+새 영상 요청에는 API 키를 사용하지 않습니다. 영상 생성은 Grok 구독 사용량 또는 Kling 회원 크레딧을 사용하며, 계정의 이용 권한과 남은 한도가 필요합니다. **실제 Grok 요청에서 완성된 클립을 확인하고 앱 기록에 복구했습니다. 수정 후 새 생성 요청, Kling 실생성, 원본 대비 AI 영상의 시각적 품질은 아직 검증하지 않았습니다.** 아래 과거 검증 기록은 로컬 미디어 처리와 당시 구현의 범위를 구분해 보관합니다.
 
 ## 모션 그래픽과의 차이
 
@@ -76,6 +76,25 @@ Grok의 범위는 설치된 공식 CLI의 `bundled/skills/imagine/SKILL.md`와 [
 ```sh
 node --test Tests/*subscription.test.cjs Tests/video-cli.test.cjs Tests/subscription-connections.test.cjs Tests/video-providers.test.cjs Tests/image-video.test.cjs Tests/studio-ui.test.cjs
 ```
+
+### 2026-09-28 Grok completion recovery — development build 11
+
+Two user-requested Grok attempts completed and saved videos, but the app reported that the generation tool had not run. It only accepted completion events after its own ACP permission callback. Grok 1.0.41 inherited Claude's global `defaultMode=auto` through its separate permission resolver, even with the Claude compatibility features disabled, so the CLI approved the call without that callback. This was an app integration error; the observed attempts did not fail because of the subscription.
+
+The app now adds `[permission] ask = ["reference_to_video"]` to its isolated `config.toml`. Only the verified previous app schema can be migrated; the original config is retained in a private recovery copy. Existing authentication and global Claude/Grok settings are untouched. Explicit ask rules precede inherited allow/auto behavior in the [official permission resolver](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-workspace/src/permission/resolution.rs) and [preflight gate](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-workspace/src/permission/gate_preflight.rs).
+
+Tool observation and app approval are now recorded separately. A single completed clip with the exact approved inputs and a validated session-local output path is retained even if the callback was absent. Changed inputs, a second invocation, or a lost response remain uncertain and block routine regeneration. The app records prompt transmission before sending it, covering disconnection before the first tool event. Initial model proposals may precede the CLI's typed argument normalization; the actual approval check remains exact.
+
+- All 68 affected adapter, connection, process, and scene tests passed, including replay of the observed event sequence without an approval callback, disconnect recovery, argument changes, duplicate calls, and malformed call IDs. An independent code review checked the approval boundary and its regressions.
+- Both existing MP4s decoded completely: 960×960, 24fps, 5.041667 seconds, with audio. The latest was matched against the saved prompt, duration, composition, resolution, and image hash, then restored as the completed first scene. Both original videos remain intact. The history and old receipt were backed up; unrelated history entries were unchanged.
+- The installed CLI's read-only `inspect --json` confirmed that the updated app config is a loaded permission source. This does not prove a new live ACP approval callback.
+- The packaged Node/Runtime authenticated the existing Grok OAuth login and polled the restored receipt successfully without a provider call. All 20 Runtime/StudioUI files match the source; app signature, DMG checksum, and the mounted app signature passed verification.
+- Build 11 was launched. The macOS session was locked (`CGSSessionScreenIsLocked=1`), so native visual acceptance and playback interaction were not completed. Full local MP4 decoding is a separate verification result.
+- Repair and verification submitted **zero new model prompts, video requests, or image uploads**. A new live generation after the policy change, Kling generation completion, and visual fidelity assessment remain unverified.
+
+Local evidence is in `.local/grok-result-recovery-20260928/`, including `tests-reviewed.log`, `existing-clips.json`, `recovery-receipt.json`, and `policy-loaded.json`. User media and private backups are excluded from Git.
+
+Local packages: `dist/MotionBoard Studio Development 11.app` and `dist/MotionBoardStudio-development-11-arm64.dmg` (73,110,113 bytes; SHA256 `8ff39dbc746382517ea489342098922ac9ef3eceeb0342470b4befc9f23847f0`). Earlier builds are preserved. The development package remains ad-hoc signed and unnotarized; no public release was changed.
 
 ### 2026-09-28 Grok profile compatibility — development build 10
 
