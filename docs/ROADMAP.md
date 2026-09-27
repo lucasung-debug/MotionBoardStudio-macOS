@@ -1,38 +1,37 @@
-# Roadmap
+# Original-application port roadmap
 
-Status: Phase 1 is implemented and has automated model, renderer, and native export verification. Manual editor acceptance remains open. The milestones below separate that implementation from future scope; see [VALIDATION.md](VALIDATION.md) for exact checks and limits.
+The target is the creator-provided MotionBoardStudio 0.3.2 production workflow. The earlier independent tile editor remains a prototype; completing its checks does not complete this roadmap.
 
-## Phase 1 — Local editor and exports
+## 1. Restore the correct baseline
 
-Implemented in the initial macOS editor:
+- Preserve the thirty recovered source files and their original relative paths.
+- Preview the original input form and concept/YAML/image/video/history tabs.
+- Keep browser-only preview capabilities distinct from the application's desktop services.
+- Record provenance and the original `window.studio` bridge contract.
 
-- Native SwiftUI controls and a WKWebView Canvas preview with sixteen original effects.
-- Per-tile text, effect, and accent editing; shared playback, pause, and timeline seeking.
-- JSON save and open, including validation of unsupported versions and invalid documents.
-- Standalone offline HTML export and PNG export of the selected frame.
-- Native H.264 MP4 export using explicit frame timestamps, progress, and cancellation.
-- Swift core models and focused tests for document validation, timing, and export inputs.
-- Atomic local draft recovery, with discard confirmation when replacing a recovered draft.
+## 2. Connect the Swift desktop shell
 
-Builds and automated model, rendering, and export checks have passed. Remaining acceptance includes manual macOS editing and playback, native save/open dialogs, clipboard use, draft recovery interactions, and light/dark appearance. The available graphical session was locked during verification, so this phase is not marked fully accepted.
+- Present the original interface in WebKit with typed, allowlisted Swift messages.
+- Port the original production-entry schema and history storage to Application Support.
+- Implement native open/save panels, imported images/music, Finder reveal, and cancellable tasks.
+- Keep image/video access scoped to the application asset directories.
+- Verify reloading, persistence, keyboard use, and native dialogs with the real UI.
 
-## Phase 2 — Storyboard interoperability and providers
+## 3. Restore original generation and rendering
 
-Planned after the local workflow is verified:
+- Preserve the original prompt documents and result normalization.
+- Implement and verify provider login, renewal, streaming, and error handling.
+- Preserve the structured direction engine and the experimental generated-code contract.
+- Compare original-engine frame capture in all three aspect ratios, including Korean text and fonts.
+- Restore music selection/import, beat analysis, sound effects, mixing, and MP4 output.
+- Verify cancellation and failed regeneration preserve the previous completed result.
 
-- Define a documented storyboard/spec format with stable identifiers, versioning, validation, and import/export fixtures.
-- Map scenes, timing, text, and supported visual parameters into editable boards; surface unsupported fields explicitly.
-- Introduce a provider abstraction so generation can be added without coupling local documents to one service.
-- Add providers through their documented, supported authentication methods. Store secrets in macOS Keychain; keep them out of project files, exports, and logs.
-- Show the provider, requested action, and any known cost before a user initiates a remote generation request.
+## 4. Improve the existing workflow
 
-Provider integrations and Keychain handling remain planned. No provider compatibility, authentication support, or hosted generation is claimed by Phase 1.
+- Add a seekable scene preview before final export.
+- Make references, start/end states, and loop behavior explicit in the generation contract.
+- Support revising a single scene without regenerating the entire production.
+- Add export presets, reproducible render receipts, and clearer job progress.
+- Complete native UI acceptance, packaging, signing, and distribution verification.
 
-## Phase 3 — Audio, review, and distribution
-
-- Add local audio import, beat markers, and timing controls; verify synchronization in previews and exported video.
-- Add review workflows for comparing revisions, inspecting frames, and recording export settings.
-- Prepare reproducible app packaging, signing, and notarization; verify installation and launch on supported macOS versions.
-- Maintain a feature comparison against observable reference behavior, separating implemented, verified, unsupported, and deferred items. Evaluate visual and workflow parity with reproducible examples rather than assumed equivalence.
-
-Reuse of material from the previously assessed Windows application depends on clarified rights. That dependency does not authorize copying its code, prompts, or assets. See [INSPIRATION.md](INSPIRATION.md) for the reference and source boundaries.
+The source-backed mapping and verification boundaries are in [ORIGINAL-PORT.md](ORIGINAL-PORT.md). These are planned port steps, not claims that the original application's services already run in Swift.

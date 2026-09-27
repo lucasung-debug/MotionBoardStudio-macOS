@@ -1,26 +1,24 @@
-# Inspiration and source boundaries
+# Design reference and proposed improvements
 
-MotionBoardStudio is an original macOS project for arranging, editing, and exporting motion studies. Its implementation is being developed independently in this repository.
+The implementation baseline is the creator-provided MotionBoardStudio 0.3.2 application. The reference article informs improvements to that workflow; it does not replace the original app with an unrelated tile editor.
 
 ## Public reference
 
-Charlie Hills's [public motion graphics article](https://charliehills.substack.com/p/opus-55-motion-graphics) presents 16 effects on a shared eight-second loop and a workflow using explicit states, references, and iteration. It describes an editable HTML result with fonts and images. The supporting guide and prompts require a free subscription; that material was not accessed for this project.
+Charlie Hills's [public motion graphics article](https://charliehills.substack.com/p/opus-55-motion-graphics) presents sixteen effects sharing an eight-second loop and a workflow using explicit states, references, and iteration. It describes an editable HTML result. The supporting guide and prompts require a free subscription; that material was not accessed for this project.
 
-## Our implementation choices
+## Improvements to evaluate in the original app
 
-The following choices belong to this project. They are not claims about the reference's source code or internal architecture:
+| Observation | Proposed application improvement | Status |
+| --- | --- | --- |
+| Motion examples share a clear loop | Expose a shared seekable preview before committing to a full MP4 render | Planned |
+| Explicit states help specify motion | Add start, transition, and end-state fields to scene review | Planned |
+| Iteration is part of production | Revise one scene while retaining approved scenes and assets | Planned |
+| Editable HTML can remain useful after generation | Provide a clearly labeled composition preview/export alongside video | Planned |
 
-- SwiftUI supplies native macOS editing controls; a WKWebView hosts an original Canvas renderer.
-- Sixteen original effects share a playback clock and seekable timeline. Each tile has editable text, effect selection, and accent color.
-- A local JSON document preserves the board for later editing.
-- Standalone offline HTML, PNG stills, and native H.264 MP4 are implemented export formats. Rendering uses explicit frame timestamps, with cancellation for video export.
+These are our design proposals, not assertions about the article's internal implementation. The original application already includes structured direction, generated motion code, review, and video rendering; the port should preserve those capabilities before expanding them.
 
-Implementation and acceptance status are tracked in [ROADMAP.md](ROADMAP.md); the completed checks and their limits are recorded in [VALIDATION.md](VALIDATION.md).
+## Source boundaries
 
-## Attribution and rights
+The user clarified that the creator openly supplied the original application. Its recovered sources are now retained under `upstream/MotionBoardStudio-0.3.2/` as the porting baseline. [SOURCE-PROVENANCE.md](SOURCE-PROVENANCE.md) records this context and attribution.
 
-The repository's MIT license covers its original source code. It does not grant rights to the linked article, its downloadable kit, or third-party text, fonts, images, audio, and other assets. Users retain their rights to their own assets and must have the permissions needed for anything they import or redistribute.
-
-No source repository or reuse license was identified on the visible article page. Neither its gated prompts nor its kit has been copied into this project.
-
-A recovered Windows application was used for an earlier architecture assessment. Permission to reuse its code is unresolved; its source and prompts are excluded from this implementation. This project is not presented as a licensed fork of that application.
+The linked article and its downloadable kit are separate materials. Neither the gated prompts nor the kit has been copied. External fonts, music, and other assets retain their own terms.

@@ -1,0 +1,8 @@
+{
+  "name": "motion-board-studio",
+  "productName": "모션보드 스튜디오",
+  "version": "0.3.2",
+  "private": true,
+  "description": "주제형 모션그래픽 올인원 가이드를 실행하는 데스크톱 스튜디오 — 제작 명세 · GPT 4×4 보드 · 비트 동기 모션 영상(MP4)까지 한 번에 (ChatGPT/Claude)",
+  "main": "main.cjs"
+}

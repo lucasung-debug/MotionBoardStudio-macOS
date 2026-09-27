@@ -1,0 +1,9 @@
+/* Preview notice only; original renderer styles remain unchanged. */
+#original-preview-banner {
+  flex: 0 0 auto;
+  padding: 9px 20px;
+  border-bottom: 1px solid #70592f;
+  background: #302718;
+  color: #f4d8a0;
+  font: 500 12px/1.5 system-ui, sans-serif;
+}

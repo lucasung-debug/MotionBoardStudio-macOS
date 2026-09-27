@@ -1,4 +1,6 @@
-# Project JSON format
+# Earlier tile-editor prototype: project format
+
+This document describes the independent tile-editor prototype, not the original MotionBoardStudio production-entry or direction formats. The source-based port must preserve the contracts in `upstream/MotionBoardStudio-0.3.2/`; see [ORIGINAL-PORT.md](ORIGINAL-PORT.md).
 
 Version 1 stores an editable motion board as a UTF-8 JSON object. Save it with a `.json` extension and open it through the app's Open action. The native file picker accepts files up to 1,048,576 bytes. Validation runs when a project is decoded or encoded.
 

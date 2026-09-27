@@ -1,4 +1,6 @@
-# Validation record
+# Earlier tile-editor prototype: validation record
+
+Scope correction: this record applies only to the earlier independent Swift/Canvas tile editor. It does not verify the original MotionBoardStudio 0.3.2 workflow or its current port. The source-based port is tracked in [ORIGINAL-PORT.md](ORIGINAL-PORT.md).
 
 Checked on 2026-09-27 with Swift 6.4, Xcode 27.0 (27A266a), and an Apple Silicon macOS 27 host. The package declares macOS 14 as its deployment target; older systems and Intel hardware were not exercised.
 
