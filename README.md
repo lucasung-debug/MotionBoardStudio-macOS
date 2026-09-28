@@ -37,6 +37,8 @@ Swift 앱이 WebKit 화면을 띄우고, 로컬 Node.js 프로세스가 제작 �
 
 Development build 11 fixes completed Grok videos being reported as unstarted when the CLI inherits Claude's automatic permissions. The app adds an explicit video permission rule to its own profile, retains verified completed output even if the approval callback is missing, and preserves uncertain requests to prevent accidental retries. The existing first-scene clip was recovered locally without generating another video. See the [recovery and validation record](docs/IMAGE-VIDEO.md#2026-09-28-grok-completion-recovery--development-build-11).
 
+**Known issue:** ChatGPT logout in MotionBoard can fail with a Keychain error. Development build 12 preserves a safe macOS error code for diagnosis; successful logout with the affected account has not yet been verified. See the [logout investigation checkpoint](docs/AUTH-LOGOUT.md) for the tested behavior and remaining work.
+
 Grok CLI Imagine의 `reference_to_video`는 장면당 1~15초와 480p·720p를 사용합니다. Kling의 `kling-video-v2_6`는 5초·10초와 720p·1080p를 제공하며, 현재 어댑터는 오디오 생성을 끕니다. 실제 선택지는 계정에서 확인되는 범위에 따릅니다. 이전 API로 접수한 작업은 저장된 앱 키체인 정보와 원래 경로로 상태 확인만 이어가고, 새 요청에는 API 키로 전환하는 대체 경로가 없습니다.
 
 직접 만든 영상은 **이 장면에 클립 가져오기**로 넣을 수 있습니다. 이미 보드가 있는 기록에서 클립 가져오기와 로컬 합성은 영상 서비스 구독 연결 없이 사용할 수 있습니다. 자세한 사용법과 검증 범위는 [이미지 활용 영상 안내](docs/IMAGE-VIDEO.md)에 정리했습니다.
@@ -71,7 +73,7 @@ arm64 패키지에는 공식 Node.js 24.21.0과 별도로 컴파일한 FFmpeg가
 ## 검증
 
 ```sh
-node --test Tests/original-auth.test.cjs Tests/original-engine.test.cjs Tests/specification.test.cjs Tests/claude-activity.test.cjs Tests/original-bridge.test.cjs Tests/original-preview.test.cjs
+node --test Tests/original-auth.test.cjs Tests/worker-auth.test.cjs Tests/original-engine.test.cjs Tests/specification.test.cjs Tests/claude-activity.test.cjs Tests/original-bridge.test.cjs Tests/original-preview.test.cjs
 node --test Tests/*subscription.test.cjs Tests/video-cli.test.cjs Tests/subscription-connections.test.cjs Tests/video-providers.test.cjs Tests/image-video.test.cjs Tests/studio-ui.test.cjs Tests/image-video-media.test.cjs
 scripts/verify-render.sh .local/original-validation-new
 ```
