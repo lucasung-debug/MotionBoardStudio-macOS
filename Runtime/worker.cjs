@@ -17,7 +17,7 @@ function nativeCall(method, params = {}) {
   if (stopping) return Promise.reject(new Error('앱이 종료 중입니다.'));
   const id = 'n' + (++nextId);
   return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject });
+    pending.set(id, { resolve, reject, method });
     send({ kind: 'native', id, method, params });
   });
 }
@@ -27,7 +27,16 @@ async function onMessage(message) {
     const call = pending.get(message.id);
     if (!call) return;
     pending.delete(message.id);
-    if (message.error) call.reject(new Error(message.error)); else call.resolve(message.result);
+    if (message.error) {
+      const error = new Error(message.error), storage = message.storageError;
+      if (['vault.read', 'vault.write', 'vault.delete'].includes(call.method) &&
+          storage?.operation === call.method.slice(6) && Number.isInteger(storage.status) &&
+          storage.status >= -2147483648 && storage.status <= 2147483647 && storage.status !== 0) {
+        error.storageStatus = storage.status;
+        error.storageOperation = storage.operation;
+      }
+      call.reject(error);
+    } else call.resolve(message.result);
     return;
   }
   if (message.kind === 'init') {

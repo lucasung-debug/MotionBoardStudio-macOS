@@ -1,6 +1,16 @@
 import Foundation
 import Security
 
+struct StudioVaultError: LocalizedError, Sendable {
+    enum Operation: String, Sendable { case read, write, delete }
+    let operation: Operation
+    let status: OSStatus
+    var errorDescription: String? { "앱 보안 저장소 처리에 실패했습니다 (macOS \(status))." }
+    var diagnostic: JSONValue {
+        .object(["operation": .string(operation.rawValue), "status": .number(Double(status))])
+    }
+}
+
 struct StudioVault {
     let service: String
     init(service: String = "io.github.lucasung-debug.motionboardstudio.accounts") { self.service = service }
@@ -18,7 +28,7 @@ struct StudioVault {
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = result as? Data,
               let value = String(data: data, encoding: .utf8) else {
-            throw StudioError("키체인에서 앱 계정을 읽지 못했습니다 (\(status)).")
+            throw StudioVaultError(operation: .read, status: status)
         }
         return value
     }
@@ -33,12 +43,12 @@ struct StudioVault {
             add[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             status = SecItemAdd(add as CFDictionary, nil)
         }
-        guard status == errSecSuccess else { throw StudioError("키체인에 앱 계정을 저장하지 못했습니다 (\(status)).") }
+        guard status == errSecSuccess else { throw StudioVaultError(operation: .write, status: status) }
     }
     func delete(_ account: String) throws {
         let status = SecItemDelete(try query(account) as CFDictionary)
         guard [errSecSuccess, errSecItemNotFound].contains(status) else {
-            throw StudioError("키체인에서 앱 계정을 제거하지 못했습니다 (\(status)).")
+            throw StudioVaultError(operation: .delete, status: status)
         }
     }
 }

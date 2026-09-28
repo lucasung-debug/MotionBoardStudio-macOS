@@ -133,7 +133,9 @@ final class RuntimeBridge {
                     let result = try await call(method, params)
                     try self.send(.object(["kind": .string("nativeResult"), "id": .string(id), "result": result]))
                 } catch {
-                    try? self.send(.object(["kind": .string("nativeResult"), "id": .string(id), "error": .string(error.localizedDescription)]))
+                    var response: [String: JSONValue] = ["kind": .string("nativeResult"), "id": .string(id), "error": .string(error.localizedDescription)]
+                    if let storageError = error as? StudioVaultError { response["storageError"] = storageError.diagnostic }
+                    try? self.send(.object(response))
                 }
             }
         default: break

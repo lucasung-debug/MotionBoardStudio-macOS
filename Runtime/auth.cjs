@@ -42,7 +42,16 @@ function failure(code) {
 }
 
 function safeFailure(error, fallback = 'AUTH_RESPONSE') {
-  return error instanceof AuthError ? error : failure(fallback);
+  if (error instanceof AuthError) return error;
+  const safe = failure(fallback);
+  if (fallback === 'AUTH_STORAGE' && ['read', 'write', 'delete'].includes(error?.storageOperation) &&
+      Number.isInteger(error.storageStatus) && error.storageStatus >= -2147483648 &&
+      error.storageStatus <= 2147483647 && error.storageStatus !== 0) {
+    safe.storageStatus = error.storageStatus;
+    safe.storageOperation = error.storageOperation;
+    safe.message = `앱 보안 저장소 ${({ read: '읽기', write: '저장', delete: '로그아웃' })[error.storageOperation]}에 실패했습니다 (macOS ${error.storageStatus}).`;
+  }
+  return safe;
 }
 
 function deferred() {

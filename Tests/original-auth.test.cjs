@@ -510,6 +510,38 @@ test('vault errors do not expose native details or falsely confirm logout', asyn
   assertPublic(h.events);
 });
 
+test('logout reports only structured numeric Keychain errors and retains failed credentials', async t => {
+  const h = harness(t, {
+    values: { chatgpt: JSON.stringify(stored('chatgpt')) },
+    nativeHook: async (method, payload, next) => {
+      if (method === 'vault.delete') throw Object.assign(new Error(REFRESH), { storageOperation: 'delete', storageStatus: -34018 });
+      return next();
+    }
+  });
+  await assert.rejects(h.chatgpt.logout(), error => {
+    assertPublic(error); assert.equal(error.storageStatus, -34018);
+    assert.equal(error.storageOperation, 'delete');
+    assert.equal(error.message, '앱 보안 저장소 로그아웃에 실패했습니다 (macOS -34018).');
+    return error.code === 'AUTH_STORAGE';
+  });
+  assert.equal((await h.chatgpt.status()).loggedIn, true);
+});
+
+test('native storage diagnostics cannot carry text, arbitrary operations or oversized numbers', async t => {
+  for (const extra of [
+    { storageOperation: 'delete', storageStatus: REFRESH },
+    { storageOperation: REFRESH, storageStatus: -34018 },
+    { storageOperation: 'delete', storageStatus: 2147483648 },
+    { storageOperation: 'delete', storageStatus: 0 }
+  ]) {
+    const h = harness(t, { nativeHook: async () => { throw Object.assign(new Error(REFRESH), extra); } });
+    await assert.rejects(h.chatgpt.logout(), error => {
+      assertPublic(error); assert.equal(error.storageStatus, undefined);
+      return error.code === 'AUTH_STORAGE';
+    });
+  }
+});
+
 test('invalid stored JSON and expired non-refreshable entries cannot authenticate', async (t) => {
   const h = harness(t, { values: {
     chatgpt: '{invalid JSON',
